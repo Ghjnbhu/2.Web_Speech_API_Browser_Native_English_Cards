@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>English Study – Singular & Plural</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #000;
+    }
+
+    /* ===== HEADER (aligned with cards) ===== */
+    .top-bar-wrapper {
+      width: 916px;
+      margin: 0 auto;
+    }
+
+    .top-bar {
+      position: relative;
+      width: 100%;
+      height: 40px;
+      padding: 6px 12px;
+      background: #484348a8;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0 0 10px 10px;
+      color: #fff;
+      box-sizing: border-box;
+    }
+
+    .menu-button {
+      position: absolute;
+      left: 12px;
+      top: 6px;
+      border: none;
+      background: #0078d4;
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .header-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    /* ===== PAGE CONTENT ===== */
+    .page-content {
+      padding: 45px 0 16px;
+    }
+
+    /* ===== CARDS (height increased by 10%) ===== */
+    .card {
+      width: 400px;
+      height: 400px;
+      background: #4f4949;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      padding: 35.2px 16px;  /* Increased from 32px to 35.2px (+10%) */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #fff;
+      box-sizing: border-box;
+    }
+
+    .cards-row {
+      width: 916px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 50px;
+      justify-content: center;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #fff;
+      margin-bottom: 8px;
+      align-self: flex-start;
+    }
+
+    .english-word {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4.4px;  /* Increased from 4px (+10%) */
+    }
+
+    .transcription {
+      font-size: 16px;
+      color: #fff;
+      margin-bottom: 13.2px;  /* Increased from 12px (+10%) */
+    }
+
+    .svg-wrapper {
+      width: 100px;
+      height: 110px;  /* Increased from 100px (+10%) */
+      margin: 13.2px 0;  /* Increased from 12px (+10%) */
+    }
+
+    .translation {
+      margin-top: 13.2px;  /* Increased from 12px (+10%) */
+      font-size: 18px;
+      color: #fff;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 960px) {
+      .top-bar-wrapper {
+        width: 90%;
+      }
+      .cards-row {
+        width: 90%;
+        flex-wrap: wrap;
+      }
+      .card {
+        width: 100%;
+        max-width: 450px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .card {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===== HEADER (edges now match cards exactly) ===== -->
+  <div class="top-bar-wrapper">
+    <div class="top-bar">
+      <button class="menu-button">Menu</button>
+      <div class="header-title">English Study</div>
+    </div>
+  </div>
+
+  <!-- ===== CONTENT ===== -->
+  <div class="page-content">
+    <div class="cards-row">
+
+      <!-- ===== SINGULAR CARD ===== -->
+      <div class="card">
+        <div class="card-title">Singular</div>
+        <div class="english-word">Apple</div>
+        <div class="transcription">[ˈæp.əl]</div>
+
+        <div class="svg-wrapper">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <path d="M40 6c-2.5 0-5 1.5-6.5 3.2C32 7.5 30 6 27.5 6 24 6 21 9 21 13c0 2.7 1.2 5.3 3.2 7.1C22 21 20 23.5 20 27c0 7 5 17 12 17s12-10 12-17c0-3.5-2-6-4.2-6.9C41.8 18.3 43 15.7 43 13c0-4-3-7-7-7z"
+                  fill="#e53935"/>
+            <path d="M34 8c1-3 3-5 6-6" stroke="#2e7d32" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <div class="translation">яблоко</div>
+      </div>
+
+      <!-- ===== PLURAL CARD ===== -->
+      <div class="card">
+        <div class="card-title">Plural</div>
+        <div class="english-word">Apples</div>
+        <div class="transcription">[ˈæp.əlz]</div>
+
+        <div class="svg-wrapper">
+          <svg viewBox="0 0 80 64" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(4,0)">
+              <path d="M26 10c-2.5 0-5 1.5-6.5 3.2C18 11.5 16 10 13.5 10 10 10 7 13 7 17c0 2.7 1.2 5.3 3.2 7.1C8 25 6 27.5 6 31c0 7 5 17 12 17s12-10 12-17c0-3.5-2-6-4.2-6.9C27.8 21.3 29 18.7 29 16c0-4-3-6-7-6z"
+                    fill="#e53935"/>
+              <path d="M20 12c1-3 3-5 6-6" stroke="#2e7d32" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </g>
+            <g transform="translate(26,4)">
+              <path d="M26 10c-2.5 0-5 1.5-6.5 3.2C18 11.5 16 10 13.5 10 10 10 7 13 7 17c0 2.7 1.2 5.3 3.2 7.1C8 25 6 27.5 6 31c0 7 5 17 12 17s12-10 12-17c0-3.5-2-6-4.2-6.9C27.8 21.3 29 18.7 29 16c0-4-3-6-7-6z"
+                    fill="#f4511e"/>
+              <path d="M20 12c1-3 3-5 6-6" stroke="#2e7d32" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="translation">яблоки</div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>
