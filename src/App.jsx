@@ -1,4 +1,4 @@
-// App.js (fixed with proper useEffect dependencies)
+// App.js (with scoped SVG CSS classes to prevent color conflicts)
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
@@ -16,6 +16,7 @@ const App = () => {
   const [activeCard, setActiveCard] = useState('singular');
   const [availableVoices, setAvailableVoices] = useState([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceSupport, setVoiceSupport] = useState(true);
   
   // Settings state
   const [settings, setSettings] = useState({
@@ -49,10 +50,18 @@ const App = () => {
   const initialStudyStartRef = useRef(false);
   const cachedVoiceRef = useRef(null);
   const userSelectedVoiceNameRef = useRef(""); // Track user's actual selection
-  const isVoicesLoadedRef = useRef(false); // Track if voices have been loaded initially
+  const isVoicesLoadedRef = useRef(false);
+  const voiceLoadAttemptsRef = useRef(0);
+
+  // Check if speech synthesis is supported
+  const isSpeechSupported = () => {
+    return typeof window !== 'undefined' && window.speechSynthesis !== undefined;
+  };
 
   // Get current voice object from cache or available voices
   const getCurrentVoice = () => {
+    if (!isSpeechSupported()) return null;
+    
     // Always use the user's selected voice name (not the one that might have been changed)
     const targetVoiceName = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     
@@ -71,54 +80,115 @@ const App = () => {
     return voice || null;
   };
 
-  // Load available voices - runs only once on mount
-  useEffect(() => {
-    const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      setAvailableVoices(voices);
-      
-      // CRITICAL: Preserve user's selected voice if it exists
-      const userSelectedVoice = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
-      
-      if (userSelectedVoice) {
-        const voice = voices.find(v => v.name === userSelectedVoice);
-        if (voice) {
-          // User's selected voice exists in the new list - keep it
-          cachedVoiceRef.current = voice;
-          // Update settings to ensure it's set (in case it was lost)
-          if (settings.selectedVoiceName !== userSelectedVoice) {
-            setSettings(prev => ({ ...prev, selectedVoiceName: userSelectedVoice }));
-          }
-        } else {
-          // User's selected voice is not available - try to find similar or use default
-          console.warn(`Selected voice "${userSelectedVoice}" not found in reloaded voices`);
-          const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
-          if (defaultVoice && !userSelectedVoiceNameRef.current) {
-            setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
-            cachedVoiceRef.current = defaultVoice;
-          }
-        }
-      } else if (!settings.selectedVoiceName && voices.length > 0) {
-        // Only set default if no voice was ever selected by user
-        const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
-        setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
-        cachedVoiceRef.current = defaultVoice;
-      }
-      
-      isVoicesLoadedRef.current = true;
-    };
-
-    loadVoices();
-    
-    // Chrome loads voices asynchronously - but we need to preserve selection
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
+  // Force load voices with retry mechanism for mobile browsers
+  const forceLoadVoices = () => {
+    if (!isSpeechSupported()) {
+      setVoiceSupport(false);
+      return;
     }
     
-    // Cleanup function to remove event listener
+    // Try to get voices immediately
+    let voices = window.speechSynthesis.getVoices();
+    
+    if (voices && voices.length > 0) {
+      handleVoicesLoaded(voices);
+    } else {
+      // For mobile browsers, we need to trigger voice loading
+      // Create a dummy utterance to force voice loading
+      const dummyUtterance = new SpeechSynthesisUtterance('');
+      dummyUtterance.onvoiceschanged = () => {
+        voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          handleVoicesLoaded(voices);
+        }
+      };
+      
+      // Try to trigger voice loading
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(dummyUtterance);
+      
+      // Fallback: try multiple times with delay
+      const checkVoices = () => {
+        voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          handleVoicesLoaded(voices);
+        } else if (voiceLoadAttemptsRef.current < 10) {
+          voiceLoadAttemptsRef.current++;
+          setTimeout(checkVoices, 500);
+        } else {
+          console.warn('Could not load voices after multiple attempts');
+          setVoiceSupport(false);
+        }
+      };
+      
+      setTimeout(checkVoices, 100);
+    }
+  };
+
+  const handleVoicesLoaded = (voices) => {
+    setAvailableVoices(voices);
+    
+    // CRITICAL: Preserve user's selected voice if it exists
+    const userSelectedVoice = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
+    
+    if (userSelectedVoice) {
+      const voice = voices.find(v => v.name === userSelectedVoice);
+      if (voice) {
+        // User's selected voice exists in the new list - keep it
+        cachedVoiceRef.current = voice;
+        // Update settings to ensure it's set (in case it was lost)
+        if (settings.selectedVoiceName !== userSelectedVoice) {
+          setSettings(prev => ({ ...prev, selectedVoiceName: userSelectedVoice }));
+        }
+        setVoiceSupport(true);
+      } else {
+        // User's selected voice is not available - try to find similar or use default
+        console.warn(`Selected voice "${userSelectedVoice}" not found in loaded voices`);
+        const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+        if (defaultVoice && !userSelectedVoiceNameRef.current) {
+          setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+          cachedVoiceRef.current = defaultVoice;
+          setVoiceSupport(true);
+        }
+      }
+    } else if (!settings.selectedVoiceName && voices.length > 0) {
+      // Only set default if no voice was ever selected by user
+      const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+      setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+      cachedVoiceRef.current = defaultVoice;
+      setVoiceSupport(true);
+    }
+    
+    isVoicesLoadedRef.current = true;
+  };
+
+  // Load available voices - with mobile browser support
+  useEffect(() => {
+    if (!isSpeechSupported()) {
+      setVoiceSupport(false);
+      return;
+    }
+    
+    // Initial load attempt
+    forceLoadVoices();
+    
+    // Also listen for the voiceschanged event (works on desktop and some mobile browsers)
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          handleVoicesLoaded(voices);
+        }
+      };
+    }
+    
+    // Cleanup function
     return () => {
       if (window.speechSynthesis.onvoiceschanged !== undefined) {
         window.speechSynthesis.onvoiceschanged = null;
+      }
+      if (isSpeechSupported()) {
+        window.speechSynthesis.cancel();
       }
     };
   }, []); // Empty dependency array - runs only on mount
@@ -163,6 +233,12 @@ const App = () => {
       return;
     }
     
+    if (!isSpeechSupported()) {
+      console.warn('Speech synthesis not supported');
+      if (onComplete) onComplete();
+      return;
+    }
+    
     const currentVoice = getCurrentVoice();
     if (!currentVoice) {
       console.warn('No voice selected for pronunciation');
@@ -171,7 +247,11 @@ const App = () => {
     }
     
     // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.warn('Error canceling speech:', e);
+    }
     
     const repeatCount = settings.repeatTimes || 1;
     setIsSpeaking(true);
@@ -193,12 +273,19 @@ const App = () => {
         setTimeout(() => speakWithDelay(index + 1), 500);
       };
       
-      utterance.onerror = () => {
+      utterance.onerror = (event) => {
+        console.error('Speech synthesis error:', event);
         setIsSpeaking(false);
         if (onComplete) onComplete();
       };
       
-      window.speechSynthesis.speak(utterance);
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        console.error('Error speaking:', e);
+        setIsSpeaking(false);
+        if (onComplete) onComplete();
+      }
     };
     
     speakWithDelay(0);
@@ -209,6 +296,7 @@ const App = () => {
     if (!settings.autoPronounce) return;
     if (!isStudying) return;
     if (isSpeaking) return;
+    if (!voiceSupport) return;
     
     // Check if voice is selected
     const currentVoice = getCurrentVoice();
@@ -244,7 +332,13 @@ const App = () => {
     }
     
     // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
+    if (isSpeechSupported()) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {
+        console.warn('Error canceling speech:', e);
+      }
+    }
     setIsSpeaking(false);
     
     // Reset all state
@@ -392,7 +486,13 @@ const App = () => {
         clearInterval(timerIntervalRef.current);
       }
       // Cancel any ongoing speech on unmount
-      window.speechSynthesis.cancel();
+      if (isSpeechSupported()) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {
+          console.warn('Error canceling speech on unmount:', e);
+        }
+      }
     };
   }, []);
 
@@ -486,12 +586,16 @@ const App = () => {
       if (voice) {
         cachedVoiceRef.current = voice;
         const testText = "Hello! Voice selected successfully.";
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(testText);
-        utterance.voice = voice;
-        utterance.rate = 0.9;
-        utterance.pitch = 1.0;
-        window.speechSynthesis.speak(utterance);
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(testText);
+          utterance.voice = voice;
+          utterance.rate = 0.9;
+          utterance.pitch = 1.0;
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          console.error('Error testing voice:', e);
+        }
       }
     } else {
       cachedVoiceRef.current = null;
@@ -505,6 +609,12 @@ const App = () => {
       // Check if a database is loaded
       if (!dbLoaded || allRecords.length === 0) {
         alert('⚠️ No database loaded!\n\nPlease load a database file using the "Load DB" button before starting a study session.');
+        return;
+      }
+      
+      // Check if voice is supported
+      if (!isSpeechSupported()) {
+        alert('⚠️ Your browser does not support speech synthesis.\n\nPlease use a different browser like Firefox, Chrome, or Edge for voice features.');
         return;
       }
       
@@ -528,7 +638,8 @@ const App = () => {
     }
   };
 
-  const renderSvgToContainer = (container, svgCode) => {
+  // Function to render SVG with scoped CSS classes to prevent conflicts
+  const renderSvgToContainer = (container, svgCode, uniqueId) => {
     if (!container) return;
     
     if (!svgCode || svgCode.trim() === '') {
@@ -538,13 +649,37 @@ const App = () => {
     
     try {
       if (svgCode.includes('<svg')) {
+        // Create a unique ID for this SVG instance
+        const scopeId = uniqueId || `svg-${Date.now()}-${Math.random()}`;
+        
+        // Insert the SVG
         container.innerHTML = svgCode;
+        
         const svgElement = container.querySelector('svg');
         if (svgElement) {
           svgElement.setAttribute('width', '100%');
           svgElement.setAttribute('height', '100%');
           svgElement.style.maxWidth = '150px';
           svgElement.style.maxHeight = '150px';
+          
+          // Get all style elements in the SVG
+          const styleElements = svgElement.querySelectorAll('style');
+          styleElements.forEach(style => {
+            let styleContent = style.innerHTML;
+            // Replace class selectors with scoped versions
+            styleContent = styleContent.replace(/\.st(\d+)/g, `.${scopeId}-st$1`);
+            style.innerHTML = styleContent;
+          });
+          
+          // Update all elements to use scoped classes
+          const allElements = svgElement.querySelectorAll('[class]');
+          allElements.forEach(el => {
+            const oldClass = el.getAttribute('class');
+            if (oldClass && oldClass.match(/st\d+/)) {
+              const newClass = oldClass.replace(/st(\d+)/g, `${scopeId}-st$1`);
+              el.setAttribute('class', newClass);
+            }
+          });
         }
       } else {
         container.innerHTML = '';
@@ -684,8 +819,8 @@ const App = () => {
   useEffect(() => {
     if (currentRecord && dbLoaded) {
       setTimeout(() => {
-        renderSvgToContainer(singularSvgRef.current, currentRecord.singular?.svgCode);
-        renderSvgToContainer(pluralSvgRef.current, currentRecord.plural?.svgCode);
+        renderSvgToContainer(singularSvgRef.current, currentRecord.singular?.svgCode, 'singular');
+        renderSvgToContainer(pluralSvgRef.current, currentRecord.plural?.svgCode, 'plural');
       }, 50);
     } else if (!dbLoaded) {
       if (singularSvgRef.current) singularSvgRef.current.innerHTML = '';
@@ -868,6 +1003,13 @@ const App = () => {
                     ✓ Current voice: {settings.selectedVoiceName || "None selected"}
                   </small>
                 </div>
+                {!voiceSupport && (
+                  <div className="setting-item">
+                    <small style={{ color: '#f44336', fontSize: '0.8rem' }}>
+                      ⚠️ Voice support not available in this browser. Please try Firefox or Chrome.
+                    </small>
+                  </div>
+                )}
               </div>
 
               <div className="settings-section">
