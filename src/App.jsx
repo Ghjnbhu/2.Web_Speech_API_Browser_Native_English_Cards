@@ -1,4 +1,4 @@
-// App.js
+// App.js (fixed with proper useEffect dependencies)
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
@@ -10,17 +10,524 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [allRecords, setAllRecords] = useState([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [isStudying, setIsStudying] = useState(false);
+  const [activeCard, setActiveCard] = useState('singular');
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  // Settings state
+  const [settings, setSettings] = useState({
+    cardWidth: 400,
+    cardHeight: 400,
+    cardGap: 50,
+    showTranscription: true,
+    showTranslation: true,
+    fontSize: 32,
+    theme: 'dark',
+    studyTime: 10,
+    selectedVoiceName: "",
+    repeatTimes: 1,
+    autoPronounce: true
+  });
 
-  // Refs for SVG containers
+  // Refs
   const singularSvgRef = useRef(null);
   const pluralSvgRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+  const currentIndexRef = useRef(0);
+  const activeCardRef = useRef('singular');
+  const allRecordsRef = useRef([]);
+  const isStudyingRef = useRef(false);
+  const settingsRef = useRef(settings);
+  const singularCardRef = useRef(null);
+  const pluralCardRef = useRef(null);
+  const completionAlertShownRef = useRef(false);
+  const isCompletingRef = useRef(false);
+  const lastSpokenRef = useRef({ index: -1, card: '' });
+  const initialStudyStartRef = useRef(false);
+  const cachedVoiceRef = useRef(null);
+  const userSelectedVoiceNameRef = useRef(""); // Track user's actual selection
+  const isVoicesLoadedRef = useRef(false); // Track if voices have been loaded initially
+
+  // Get current voice object from cache or available voices
+  const getCurrentVoice = () => {
+    // Always use the user's selected voice name (not the one that might have been changed)
+    const targetVoiceName = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
+    
+    if (!targetVoiceName) return null;
+    
+    // If we have a cached voice and it matches the target name, use it
+    if (cachedVoiceRef.current && cachedVoiceRef.current.name === targetVoiceName) {
+      return cachedVoiceRef.current;
+    }
+    
+    // Otherwise, find from available voices and cache it
+    const voice = availableVoices.find(voice => voice.name === targetVoiceName);
+    if (voice) {
+      cachedVoiceRef.current = voice;
+    }
+    return voice || null;
+  };
+
+  // Load available voices - runs only once on mount
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      
+      // CRITICAL: Preserve user's selected voice if it exists
+      const userSelectedVoice = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
+      
+      if (userSelectedVoice) {
+        const voice = voices.find(v => v.name === userSelectedVoice);
+        if (voice) {
+          // User's selected voice exists in the new list - keep it
+          cachedVoiceRef.current = voice;
+          // Update settings to ensure it's set (in case it was lost)
+          if (settings.selectedVoiceName !== userSelectedVoice) {
+            setSettings(prev => ({ ...prev, selectedVoiceName: userSelectedVoice }));
+          }
+        } else {
+          // User's selected voice is not available - try to find similar or use default
+          console.warn(`Selected voice "${userSelectedVoice}" not found in reloaded voices`);
+          const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+          if (defaultVoice && !userSelectedVoiceNameRef.current) {
+            setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+            cachedVoiceRef.current = defaultVoice;
+          }
+        }
+      } else if (!settings.selectedVoiceName && voices.length > 0) {
+        // Only set default if no voice was ever selected by user
+        const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+        setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+        cachedVoiceRef.current = defaultVoice;
+      }
+      
+      isVoicesLoadedRef.current = true;
+    };
+
+    loadVoices();
+    
+    // Chrome loads voices asynchronously - but we need to preserve selection
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    
+    // Cleanup function to remove event listener
+    return () => {
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []); // Empty dependency array - runs only on mount
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    activeCardRef.current = activeCard;
+  }, [activeCard]);
+
+  useEffect(() => {
+    allRecordsRef.current = allRecords;
+  }, [allRecords]);
+
+  useEffect(() => {
+    isStudyingRef.current = isStudying;
+  }, [isStudying]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  // Function to add/remove continuous pulse class
+  const setCardPulsing = (cardType, isPulsing) => {
+    const cardElement = cardType === 'singular' ? singularCardRef.current : pluralCardRef.current;
+    if (cardElement) {
+      if (isPulsing) {
+        cardElement.classList.add('active-pulse');
+      } else {
+        cardElement.classList.remove('active-pulse');
+      }
+    }
+  };
+
+  // Function to speak text with repetition
+  const speakText = (text, onComplete = null) => {
+    if (!text) {
+      if (onComplete) onComplete();
+      return;
+    }
+    
+    const currentVoice = getCurrentVoice();
+    if (!currentVoice) {
+      console.warn('No voice selected for pronunciation');
+      if (onComplete) onComplete();
+      return;
+    }
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const repeatCount = settings.repeatTimes || 1;
+    setIsSpeaking(true);
+    
+    const speakWithDelay = (index) => {
+      if (index >= repeatCount) {
+        setIsSpeaking(false);
+        if (onComplete) onComplete();
+        return;
+      }
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = currentVoice;
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      
+      utterance.onend = () => {
+        // Add a small delay between repetitions
+        setTimeout(() => speakWithDelay(index + 1), 500);
+      };
+      
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        if (onComplete) onComplete();
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    };
+    
+    speakWithDelay(0);
+  };
+
+  // Function to pronounce current active word
+  const pronounceCurrentWord = () => {
+    if (!settings.autoPronounce) return;
+    if (!isStudying) return;
+    if (isSpeaking) return;
+    
+    // Check if voice is selected
+    const currentVoice = getCurrentVoice();
+    if (!currentVoice) return;
+    
+    // Get the current word based on active card
+    let currentWord = '';
+    if (activeCard === 'singular') {
+      currentWord = currentRecord?.singular?.word || '';
+    } else {
+      currentWord = currentRecord?.plural?.word || '';
+    }
+    
+    // Check if we already pronounced this specific card
+    const currentKey = `${currentIndex}_${activeCard}`;
+    if (lastSpokenRef.current === currentKey) return;
+    
+    if (currentWord && currentWord.trim() !== '') {
+      lastSpokenRef.current = currentKey;
+      speakText(currentWord);
+    }
+  };
+
+  // Function to stop all pulsing and reset study state
+  const resetStudyState = (showCompletionAlert = false) => {
+    // Prevent multiple completions
+    if (isCompletingRef.current) return;
+    
+    // Clear timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    
+    // Reset all state
+    setIsStudying(false);
+    setTimeRemaining(0);
+    setActiveCard('singular');
+    
+    // Reset last spoken tracker
+    lastSpokenRef.current = { index: -1, card: '' };
+    initialStudyStartRef.current = false;
+    
+    // Remove pulse from both cards
+    setCardPulsing('singular', false);
+    setCardPulsing('plural', false);
+    
+    // Show completion alert only once
+    if (showCompletionAlert && !completionAlertShownRef.current) {
+      isCompletingRef.current = true;
+      completionAlertShownRef.current = true;
+      alert('🎉 Study session completed! Well done!');
+      setTimeout(() => {
+        completionAlertShownRef.current = false;
+        isCompletingRef.current = false;
+      }, 500);
+    }
+  };
+
+  // Function to move to next card
+  const moveToNextCard = () => {
+    const currentIdx = currentIndexRef.current;
+    const currentActive = activeCardRef.current;
+    const records = allRecordsRef.current;
+    
+    // Remove pulse from current card
+    setCardPulsing(currentActive, false);
+    
+    if (currentActive === 'singular') {
+      setActiveCard('plural');
+      // Add pulse to new card after state update
+      setTimeout(() => {
+        setCardPulsing('plural', true);
+        // Pronounce the plural word after card becomes active
+        setTimeout(() => pronounceCurrentWord(), 200);
+      }, 50);
+    } else {
+      if (currentIdx < records.length - 1) {
+        setCurrentIndex(currentIdx + 1);
+        setCurrentRecord(records[currentIdx + 1]);
+        setActiveCard('singular');
+        setTimeout(() => {
+          setCardPulsing('singular', true);
+          // Pronounce the singular word after card becomes active
+          setTimeout(() => pronounceCurrentWord(), 200);
+        }, 100);
+      } else {
+        // End of study session - reset everything with completion alert
+        resetStudyState(true);
+      }
+    }
+  };
+
+  // Start study timer
+  const startStudyTimer = () => {
+    // Reset everything first
+    resetStudyState(false);
+    
+    // Reset flags
+    completionAlertShownRef.current = false;
+    isCompletingRef.current = false;
+    lastSpokenRef.current = { index: -1, card: '' };
+    initialStudyStartRef.current = true;
+    
+    setTimeRemaining(settingsRef.current.studyTime);
+    setIsStudying(true);
+    setActiveCard('singular');
+    
+    // Add continuous pulse to active card
+    setTimeout(() => {
+      setCardPulsing('singular', true);
+    }, 100);
+    
+    timerIntervalRef.current = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          // Check if this is the last card and we're at the end
+          const currentIdx = currentIndexRef.current;
+          const currentActive = activeCardRef.current;
+          const records = allRecordsRef.current;
+          
+          // If this is the last card (plural of last ID) - only move, don't show alert here
+          if (currentActive === 'plural' && currentIdx === records.length - 1) {
+            // Just move to next card, which will handle completion
+            moveToNextCard();
+            return settingsRef.current.studyTime;
+          }
+          
+          moveToNextCard();
+          return settingsRef.current.studyTime;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Stop study timer
+  const stopStudyTimer = () => {
+    resetStudyState(false);
+  };
+
+  // Restart timer when card changes
+  useEffect(() => {
+    if (isStudying && timerIntervalRef.current) {
+      setTimeRemaining(settingsRef.current.studyTime);
+      // Remove pulse from both, then add to active
+      setCardPulsing('singular', false);
+      setCardPulsing('plural', false);
+      setTimeout(() => {
+        setCardPulsing(activeCard, true);
+        // Pronounce the word when card changes
+        pronounceCurrentWord();
+      }, 50);
+    }
+  }, [currentIndex, activeCard]);
+
+  // Effect to handle initial pronunciation when study starts
+  useEffect(() => {
+    if (isStudying && initialStudyStartRef.current && currentRecord && activeCard === 'singular') {
+      const currentKey = `${currentIndex}_singular`;
+      if (lastSpokenRef.current !== currentKey) {
+        const word = currentRecord.singular?.word;
+        if (word && word.trim() !== '') {
+          console.log('Initial pronunciation triggered via useEffect:', word);
+          lastSpokenRef.current = currentKey;
+          speakText(word);
+          initialStudyStartRef.current = false;
+        }
+      }
+    }
+  }, [isStudying, currentRecord, activeCard, currentIndex]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+      // Cancel any ongoing speech on unmount
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   const handleMenuClick = () => {
     setIsMenuOpen(!isMenuOpen);
-    console.log('Menu clicked');
   };
 
-  // Function to render SVG directly to DOM
+  const openSettings = () => {
+    setIsMenuOpen(false);
+    setIsSettingsOpen(true);
+  };
+
+  const closeSettings = () => {
+    setIsSettingsOpen(false);
+  };
+
+  const saveSettings = () => {
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(card => {
+      card.style.width = `${settings.cardWidth}px`;
+      card.style.height = `${settings.cardHeight}px`;
+    });
+    
+    const cardsRow = document.querySelector('.cards-row');
+    if (cardsRow) {
+      cardsRow.style.gap = `${settings.cardGap}px`;
+    }
+    
+    const englishWords = document.querySelectorAll('.english-word');
+    englishWords.forEach(word => {
+      word.style.fontSize = `${settings.fontSize}px`;
+    });
+    
+    const transcriptions = document.querySelectorAll('.transcription');
+    transcriptions.forEach(trans => {
+      trans.style.display = settings.showTranscription ? 'block' : 'none';
+    });
+    
+    const translations = document.querySelectorAll('.translation');
+    translations.forEach(trans => {
+      trans.style.display = settings.showTranslation ? 'block' : 'none';
+    });
+    
+    if (settings.theme === 'light') {
+      document.body.style.background = '#f5f5f5';
+      document.querySelectorAll('.card').forEach(card => {
+        card.style.background = '#ffffff';
+        card.style.color = '#333';
+      });
+      document.querySelectorAll('.card-title, .english-word, .transcription, .translation').forEach(el => {
+        el.style.color = '#333';
+      });
+    } else {
+      document.body.style.background = '#000';
+      document.querySelectorAll('.card').forEach(card => {
+        card.style.background = '#4f4949';
+        card.style.color = '#fff';
+      });
+      document.querySelectorAll('.card-title, .english-word, .transcription, .translation').forEach(el => {
+        el.style.color = '#fff';
+      });
+    }
+    
+    if (isStudying) {
+      resetStudyState(false);
+      startStudyTimer();
+    }
+    
+    alert('Settings saved successfully!');
+    closeSettings();
+  };
+
+  const handleSettingChange = (key, value) => {
+    setSettings(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleVoiceChange = (voiceName) => {
+    console.log('User selected voice:', voiceName);
+    
+    // Store the user's selected voice name persistently
+    userSelectedVoiceNameRef.current = voiceName;
+    
+    setSettings(prev => ({ ...prev, selectedVoiceName: voiceName }));
+    
+    // Update cached voice immediately
+    if (voiceName) {
+      const voice = availableVoices.find(v => v.name === voiceName);
+      if (voice) {
+        cachedVoiceRef.current = voice;
+        const testText = "Hello! Voice selected successfully.";
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(testText);
+        utterance.voice = voice;
+        utterance.rate = 0.9;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
+    } else {
+      cachedVoiceRef.current = null;
+    }
+  };
+
+  const handleMainAction = () => {
+    if (isStudying) {
+      stopStudyTimer();
+    } else {
+      // Check if a database is loaded
+      if (!dbLoaded || allRecords.length === 0) {
+        alert('⚠️ No database loaded!\n\nPlease load a database file using the "Load DB" button before starting a study session.');
+        return;
+      }
+      
+      // Check if voice is selected for pronunciation
+      if (settings.autoPronounce && !settings.selectedVoiceName) {
+        alert('⚠️ Please select a voice in Settings before starting the study session.\n\nGo to Settings → Voice Settings to select a voice.');
+        return;
+      }
+      
+      // If database is loaded, start study session
+      if (dbLoaded && allRecords.length > 0) {
+        startStudyTimer();
+        if (settings.autoPronounce && settings.selectedVoiceName) {
+          alert(`📖 Study session started!\n\nWords will be pronounced ${settings.repeatTimes} time(s) with: ${settings.selectedVoiceName}\n\nCards will pulse continuously while being studied.`);
+        } else if (settings.autoPronounce && !settings.selectedVoiceName) {
+          alert('📖 Study session started! But no voice selected. Words will not be pronounced.\n\nGo to Settings → Voice Settings to select a voice.');
+        } else {
+          alert('📖 Study session started! Auto-pronunciation is disabled.');
+        }
+      }
+    }
+  };
+
   const renderSvgToContainer = (container, svgCode) => {
     if (!container) return;
     
@@ -48,8 +555,11 @@ const App = () => {
     }
   };
 
-  // Function to load database from .json file
   const loadDatabaseFromFile = async () => {
+    if (isStudying) {
+      stopStudyTimer();
+    }
+    
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.json,.dbms';
@@ -76,7 +586,6 @@ const App = () => {
           throw new Error("Database file contains no records");
         }
         
-        // Convert all records to card format
         const convertedRecords = records.map((record, idx) => {
           let cardData;
           
@@ -135,10 +644,11 @@ const App = () => {
         setAllRecords(convertedRecords);
         setCurrentIndex(0);
         setCurrentRecord(convertedRecords[0]);
+        setActiveCard('singular');
         setDbLoaded(true);
         setDbFileName(importedData.name || file.name.replace(/\.(json|dbms)$/, ''));
         
-        alert(`✅ Database loaded successfully!\n\nFile: ${file.name}\nRecords: ${records.length}\nNow showing first record (ID: ${convertedRecords[0].id})`);
+        alert(`✅ Database loaded successfully!\n\nFile: ${file.name}\nRecords: ${records.length}\nNow showing first record (ID: ${convertedRecords[0].id}) - Both cards displayed`);
         
       } catch (error) {
         console.error("Error loading database:", error);
@@ -153,12 +663,12 @@ const App = () => {
     fileInput.click();
   };
 
-  // Navigation functions
   const nextRecord = () => {
     if (allRecords.length > 0 && currentIndex < allRecords.length - 1) {
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
       setCurrentRecord(allRecords[newIndex]);
+      setActiveCard('singular');
     }
   };
 
@@ -167,10 +677,10 @@ const App = () => {
       const newIndex = currentIndex - 1;
       setCurrentIndex(newIndex);
       setCurrentRecord(allRecords[newIndex]);
+      setActiveCard('singular');
     }
   };
 
-  // Render SVGs whenever currentRecord changes
   useEffect(() => {
     if (currentRecord && dbLoaded) {
       setTimeout(() => {
@@ -185,101 +695,230 @@ const App = () => {
 
   return (
     <div className="app">
-      {/* HEADER (edges match cards exactly) */}
       <div className="top-bar-wrapper">
         <div className="top-bar">
           <div className="header-left">
-            <button className="menu-button" onClick={handleMenuClick}>
-              Menu
-            </button>
+            <button className="menu-button" onClick={handleMenuClick}>Menu</button>
             <div className="header-title">English Study</div>
           </div>
           
-          {/* Database info in header */}
           {dbLoaded && currentRecord && (
             <div className="header-db-info">
               <span className="db-info-label">📁</span>
               <span className="db-info-name">{dbFileName}</span>
               <span className="db-info-separator">|</span>
               <span className="db-info-id">ID: {currentRecord.id}</span>
-              {allRecords.length > 1 && (
+              {isStudying && (
                 <>
                   <span className="db-info-separator">|</span>
-                  <span className="db-info-count">{currentIndex + 1}/{allRecords.length}</span>
+                  <span className="db-info-timer">⏱️ {timeRemaining}s</span>
+                  {isSpeaking && (
+                    <>
+                      <span className="db-info-separator">|</span>
+                      <span className="db-info-timer">🔊 Speaking...</span>
+                    </>
+                  )}
                 </>
               )}
             </div>
           )}
           
-          <button className="load-db-button" onClick={loadDatabaseFromFile} disabled={isLoading}>
-            {isLoading ? 'Loading...' : '📂 Load DB'}
-          </button>
+          <div className="header-buttons">
+            <button className={isStudying ? "stop-button" : "start-button"} onClick={handleMainAction} disabled={isLoading}>
+              {isStudying ? '⏹️ Stop' : '🚀 Start'}
+            </button>
+            <button className="load-db-button" onClick={loadDatabaseFromFile} disabled={isLoading}>
+              {isLoading ? 'Loading...' : '📂 Load DB'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* CONTENT - reduced top padding */}
       <div className="page-content">
-        {/* Navigation buttons when multiple records */}
-        {dbLoaded && allRecords.length > 1 && (
+        {dbLoaded && allRecords.length > 0 && (
           <div className="navigation-buttons">
-            <button onClick={prevRecord} className="nav-button" disabled={currentIndex === 0}>
-              ◀ Previous
-            </button>
-            <span className="nav-counter">{currentIndex + 1} / {allRecords.length}</span>
-            <button onClick={nextRecord} className="nav-button" disabled={currentIndex === allRecords.length - 1}>
-              Next ▶
-            </button>
+            <button onClick={prevRecord} className="nav-button" disabled={isStudying}>◀ Previous ID</button>
+            <span className="nav-counter">ID: {currentRecord?.id || '—'} | {currentIndex + 1} / {allRecords.length}</span>
+            <button onClick={nextRecord} className="nav-button" disabled={isStudying}>Next ID ▶</button>
           </div>
         )}
 
         <div className="cards-row">
-          {/* SINGULAR CARD */}
-          <div className="card">
+          <div ref={singularCardRef} className="card">
             <div className="card-title">Singular</div>
-            <div className="space-after-title">   </div>
-            <div className="english-word">
-              {dbLoaded && currentRecord?.singular?.word ? currentRecord.singular.word : ""}
-            </div>
-            <div className="transcription">
-              {dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}
-            </div>
-            <div className="svg-wrapper" ref={singularSvgRef}>
-              {/* SVG will be rendered here dynamically */}
-            </div>
-            <div className="translation">
-              {dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}
-            </div>
+            <div className="space-after-title"></div>
+            <div className="english-word">{dbLoaded && currentRecord?.singular?.word ? currentRecord.singular.word : ""}</div>
+            <div className="transcription">{dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}</div>
+            <div className="svg-wrapper" ref={singularSvgRef}></div>
+            <div className="translation">{dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}</div>
           </div>
 
-          {/* PLURAL CARD */}
-          <div className="card">
+          <div ref={pluralCardRef} className="card">
             <div className="card-title">Plural</div>
-            <div className="space-after-title">   </div>
-            <div className="english-word">
-              {dbLoaded && currentRecord?.plural?.word ? currentRecord.plural.word : ""}
-            </div>
-            <div className="transcription">
-              {dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}
-            </div>
-            <div className="svg-wrapper" ref={pluralSvgRef}>
-              {/* SVG will be rendered here dynamically */}
-            </div>
-            <div className="translation">
-              {dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}
-            </div>
+            <div className="space-after-title"></div>
+            <div className="english-word">{dbLoaded && currentRecord?.plural?.word ? currentRecord.plural.word : ""}</div>
+            <div className="transcription">{dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}</div>
+            <div className="svg-wrapper" ref={pluralSvgRef}></div>
+            <div className="translation">{dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}</div>
           </div>
         </div>
       </div>
 
-      {/* Optional: Menu dropdown if needed */}
+      {isSettingsOpen && (
+        <div className="settings-overlay" onClick={closeSettings}>
+          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <h2>⚙️ Settings</h2>
+              <button className="settings-close" onClick={closeSettings}>×</button>
+            </div>
+            
+            <div className="settings-content">
+              <div className="settings-section">
+                <h3>Card Appearance</h3>
+                <div className="setting-item">
+                  <label>Card Width (px):</label>
+                  <input type="number" value={settings.cardWidth} onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)} min="300" max="600" step="10" />
+                </div>
+                <div className="setting-item">
+                  <label>Card Height (px):</label>
+                  <input type="number" value={settings.cardHeight} onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)} min="300" max="600" step="10" />
+                </div>
+                <div className="setting-item">
+                  <label>Gap between cards (px):</label>
+                  <input type="number" value={settings.cardGap} onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 50)} min="20" max="100" step="5" />
+                </div>
+                <div className="setting-item">
+                  <label>Font Size (px):</label>
+                  <input type="number" value={settings.fontSize} onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)} min="20" max="48" step="2" />
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Study Settings</h3>
+                <div className="setting-item">
+                  <label>Study Time per Card (seconds):</label>
+                  <input type="number" value={settings.studyTime} onChange={(e) => handleSettingChange('studyTime', parseInt(e.target.value) || 10)} min="3" max="60" step="1" />
+                </div>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input 
+                      type="checkbox" 
+                      checked={settings.autoPronounce} 
+                      onChange={(e) => handleSettingChange('autoPronounce', e.target.checked)} 
+                    /> 
+                    Auto-pronounce words during study
+                  </label>
+                </div>
+                <div className="setting-item">
+                  <small style={{ color: '#aaa', fontSize: '0.7rem' }}>⏱️ Each card pulses continuously during study</small>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Voice Settings</h3>
+                <div className="setting-item">
+                  <label>Select Voice:</label>
+                  <select 
+                    value={settings.selectedVoiceName}
+                    onChange={(e) => {
+                      handleVoiceChange(e.target.value);
+                    }}
+                    style={{
+                      background: '#3c3c3c',
+                      border: '1px solid #555',
+                      color: 'white',
+                      padding: '0.4rem 0.6rem',
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      width: '220px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">-- Select a voice --</option>
+                    {availableVoices.map((voice) => (
+                      <option key={voice.name} value={voice.name}>
+                        {voice.name} ({voice.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <label>Repeat English words:</label>
+                  <input 
+                    type="number" 
+                    value={settings.repeatTimes} 
+                    onChange={(e) => handleSettingChange('repeatTimes', parseInt(e.target.value) || 1)} 
+                    min="1" 
+                    max="5" 
+                    step="1"
+                    style={{
+                      background: '#3c3c3c',
+                      border: '1px solid #555',
+                      color: 'white',
+                      padding: '0.4rem 0.6rem',
+                      borderRadius: '6px',
+                      fontSize: '0.9rem',
+                      width: '80px'
+                    }}
+                  />
+                  <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
+                </div>
+                <div className="setting-item">
+                  <small style={{ color: '#4caf50', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                    ✓ Current voice: {settings.selectedVoiceName || "None selected"}
+                  </small>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Display Options</h3>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input type="checkbox" checked={settings.showTranscription} onChange={(e) => handleSettingChange('showTranscription', e.target.checked)} /> 
+                    Show Transcription
+                  </label>
+                </div>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input type="checkbox" checked={settings.showTranslation} onChange={(e) => handleSettingChange('showTranslation', e.target.checked)} /> 
+                    Show Translation
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Theme</h3>
+                <div className="setting-item radio-group">
+                  <label>
+                    <input type="radio" value="dark" checked={settings.theme === 'dark'} onChange={(e) => handleSettingChange('theme', e.target.value)} /> 
+                    Dark Theme
+                  </label>
+                  <label>
+                    <input type="radio" value="light" checked={settings.theme === 'light'} onChange={(e) => handleSettingChange('theme', e.target.value)} /> 
+                    Light Theme
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="settings-footer">
+              <button className="settings-cancel" onClick={closeSettings}>Cancel</button>
+              <button className="settings-save" onClick={saveSettings}>Save Settings</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isMenuOpen && (
         <div className="menu-dropdown">
+          <div className="menu-item" onClick={handleMainAction}>{isStudying ? 'Stop Study' : 'Start Study'}</div>
           <div className="menu-item" onClick={loadDatabaseFromFile}>Load Database</div>
-          <div className="menu-item" onClick={prevRecord}>Previous Record</div>
-          <div className="menu-item" onClick={nextRecord}>Next Record</div>
+          <div className="menu-item" onClick={prevRecord}>Previous ID</div>
+          <div className="menu-item" onClick={nextRecord}>Next ID</div>
+          <div className="menu-item" onClick={stopStudyTimer}>Stop Study</div>
           <div className="menu-item">Home</div>
           <div className="menu-item">Words</div>
-          <div className="menu-item">Settings</div>
+          <div className="menu-item" onClick={openSettings}>⚙️ Settings</div>
           <div className="menu-item">About</div>
         </div>
       )}
