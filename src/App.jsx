@@ -17,6 +17,8 @@ const App = () => {
   const [availableVoices, setAvailableVoices] = useState([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceSupport, setVoiceSupport] = useState(true);
+  const [voicesLoaded, setVoicesLoaded] = useState(false);
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   
   // Settings state
   const [settings, setSettings] = useState({
@@ -29,7 +31,7 @@ const App = () => {
     theme: 'dark',
     studyTime: 10,
     selectedVoiceName: "",
-    repeatTimes: 3,  // Changed from 1 to 3
+    repeatTimes: 3,
     autoPronounce: true
   });
 
@@ -49,9 +51,16 @@ const App = () => {
   const lastSpokenRef = useRef({ index: -1, card: '' });
   const initialStudyStartRef = useRef(false);
   const cachedVoiceRef = useRef(null);
-  const userSelectedVoiceNameRef = useRef(""); // Track user's actual selection
-  const isVoicesLoadedRef = useRef(false);
-  const voiceLoadAttemptsRef = useRef(0);
+  const userSelectedVoiceNameRef = useRef("");
+  const synthRef = useRef(null);
+  const voiceLoadTimeoutRef = useRef(null);
+
+  // Initialize speech synthesis
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      synthRef.current = window.speechSynthesis;
+    }
+  }, []);
 
   // Check if speech synthesis is supported
   const isSpeechSupported = () => {
@@ -62,17 +71,14 @@ const App = () => {
   const getCurrentVoice = () => {
     if (!isSpeechSupported()) return null;
     
-    // Always use the user's selected voice name (not the one that might have been changed)
     const targetVoiceName = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     
     if (!targetVoiceName) return null;
     
-    // If we have a cached voice and it matches the target name, use it
     if (cachedVoiceRef.current && cachedVoiceRef.current.name === targetVoiceName) {
       return cachedVoiceRef.current;
     }
     
-    // Otherwise, find from available voices and cache it
     const voice = availableVoices.find(voice => voice.name === targetVoiceName);
     if (voice) {
       cachedVoiceRef.current = voice;
@@ -80,118 +86,132 @@ const App = () => {
     return voice || null;
   };
 
-  // Force load voices with retry mechanism for mobile browsers
-  const forceLoadVoices = () => {
+  // Load voices using the same technique that works in AppSpeech.jsx
+  const loadVoices = () => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
       return;
     }
     
-    // Try to get voices immediately
-    let voices = window.speechSynthesis.getVoices();
+    setIsLoadingVoices(true);
     
-    if (voices && voices.length > 0) {
-      handleVoicesLoaded(voices);
-    } else {
-      // For mobile browsers, we need to trigger voice loading
-      // Create a dummy utterance to force voice loading
-      const dummyUtterance = new SpeechSynthesisUtterance('');
-      dummyUtterance.onvoiceschanged = () => {
-        voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          handleVoicesLoaded(voices);
-        }
-      };
-      
-      // Try to trigger voice loading
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(dummyUtterance);
-      
-      // Fallback: try multiple times with delay
-      const checkVoices = () => {
-        voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          handleVoicesLoaded(voices);
-        } else if (voiceLoadAttemptsRef.current < 10) {
-          voiceLoadAttemptsRef.current++;
-          setTimeout(checkVoices, 500);
-        } else {
-          console.warn('Could not load voices after multiple attempts');
-          setVoiceSupport(false);
-        }
-      };
-      
-      setTimeout(checkVoices, 100);
-    }
-  };
-
-  const handleVoicesLoaded = (voices) => {
-    setAvailableVoices(voices);
-    
-    // CRITICAL: Preserve user's selected voice if it exists
-    const userSelectedVoice = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
-    
-    if (userSelectedVoice) {
-      const voice = voices.find(v => v.name === userSelectedVoice);
-      if (voice) {
-        // User's selected voice exists in the new list - keep it
-        cachedVoiceRef.current = voice;
-        // Update settings to ensure it's set (in case it was lost)
-        if (settings.selectedVoiceName !== userSelectedVoice) {
-          setSettings(prev => ({ ...prev, selectedVoiceName: userSelectedVoice }));
-        }
+    const loadWebVoices = () => {
+      const voices = synthRef.current ? synthRef.current.getVoices() : [];
+      if (voices && voices.length > 0) {
+        setAvailableVoices(voices);
+        setVoicesLoaded(true);
         setVoiceSupport(true);
-      } else {
-        // User's selected voice is not available - try to find similar or use default
-        console.warn(`Selected voice "${userSelectedVoice}" not found in loaded voices`);
-        const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
-        if (defaultVoice && !userSelectedVoiceNameRef.current) {
-          setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
-          cachedVoiceRef.current = defaultVoice;
-          setVoiceSupport(true);
+        setIsLoadingVoices(false);
+        
+        // Set default voice if none selected
+        if (!settings.selectedVoiceName && voices.length > 0) {
+          const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+          if (defaultVoice) {
+            setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+            cachedVoiceRef.current = defaultVoice;
+          }
+        }
+        
+        alert(`✅ ${voices.length} voice(s) loaded successfully!`);
+        return true;
+      }
+      return false;
+    };
+    
+    // First attempt - immediate load
+    if (loadWebVoices()) return;
+    
+    // Set up voiceschanged event (works in Edge Android after user interaction)
+    const handleVoicesChanged = () => {
+      const voices = synthRef.current ? synthRef.current.getVoices() : [];
+      if (voices && voices.length > 0) {
+        setAvailableVoices(voices);
+        setVoicesLoaded(true);
+        setVoiceSupport(true);
+        setIsLoadingVoices(false);
+        
+        if (!settings.selectedVoiceName && voices.length > 0) {
+          const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+          if (defaultVoice) {
+            setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+            cachedVoiceRef.current = defaultVoice;
+          }
+        }
+        
+        alert(`✅ ${voices.length} voice(s) loaded successfully!`);
+        if (synthRef.current && synthRef.current.onvoiceschanged) {
+          synthRef.current.onvoiceschanged = null;
         }
       }
-    } else if (!settings.selectedVoiceName && voices.length > 0) {
-      // Only set default if no voice was ever selected by user
-      const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
-      setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
-      cachedVoiceRef.current = defaultVoice;
-      setVoiceSupport(true);
+    };
+    
+    if (synthRef.current) {
+      synthRef.current.onvoiceschanged = handleVoicesChanged;
+      
+      // Trigger voice loading by creating and canceling a dummy utterance
+      try {
+        const dummyUtterance = new SpeechSynthesisUtterance(' ');
+        synthRef.current.cancel();
+        synthRef.current.speak(dummyUtterance);
+        setTimeout(() => {
+          try {
+            synthRef.current.cancel();
+          } catch (e) {}
+        }, 100);
+      } catch (e) {
+        console.warn('Error triggering voice loading:', e);
+      }
     }
     
-    isVoicesLoadedRef.current = true;
+    // Retry loading after delays
+    let attempts = 0;
+    const retryLoad = () => {
+      if (attempts < 10) {
+        attempts++;
+        setTimeout(() => {
+          if (!voicesLoaded && loadWebVoices()) {
+            if (synthRef.current && synthRef.current.onvoiceschanged) {
+              synthRef.current.onvoiceschanged = null;
+            }
+            setIsLoadingVoices(false);
+          } else if (!voicesLoaded && attempts < 10) {
+            retryLoad();
+          } else if (!voicesLoaded && attempts >= 10) {
+            setIsLoadingVoices(false);
+            alert('⚠️ Could not load voices. Please tap the "Load Voices" button again.');
+          }
+        }, 500);
+      }
+    };
+    
+    retryLoad();
   };
 
-  // Load available voices - with mobile browser support
+  // Load voices on mount and after any user interaction
   useEffect(() => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
       return;
     }
     
-    // Initial load attempt
-    forceLoadVoices();
+    // Try to load voices automatically
+    loadVoices();
     
-    // Also listen for the voiceschanged event (works on desktop and some mobile browsers)
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        const voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          handleVoicesLoaded(voices);
-        }
-      };
-    }
-    
-    // Cleanup function
+    // Cleanup
     return () => {
-      if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.onvoiceschanged = null;
+      if (synthRef.current && synthRef.current.onvoiceschanged) {
+        synthRef.current.onvoiceschanged = null;
+      }
+      if (voiceLoadTimeoutRef.current) {
+        clearTimeout(voiceLoadTimeoutRef.current);
       }
       if (isSpeechSupported()) {
-        window.speechSynthesis.cancel();
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {}
       }
     };
-  }, []); // Empty dependency array - runs only on mount
+  }, []);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -226,14 +246,14 @@ const App = () => {
     }
   };
 
-  // Function to speak text with repetition
+  // Function to speak text (using the working approach)
   const speakText = (text, onComplete = null) => {
     if (!text) {
       if (onComplete) onComplete();
       return;
     }
     
-    if (!isSpeechSupported()) {
+    if (!isSpeechSupported() || !synthRef.current) {
       console.warn('Speech synthesis not supported');
       if (onComplete) onComplete();
       return;
@@ -248,7 +268,7 @@ const App = () => {
     
     // Cancel any ongoing speech
     try {
-      window.speechSynthesis.cancel();
+      synthRef.current.cancel();
     } catch (e) {
       console.warn('Error canceling speech:', e);
     }
@@ -267,20 +287,25 @@ const App = () => {
       utterance.voice = currentVoice;
       utterance.rate = 0.9;
       utterance.pitch = 1.0;
+      utterance.lang = 'en-US';
       
       utterance.onend = () => {
-        // Add a small delay between repetitions
         setTimeout(() => speakWithDelay(index + 1), 500);
       };
       
       utterance.onerror = (event) => {
         console.error('Speech synthesis error:', event);
-        setIsSpeaking(false);
-        if (onComplete) onComplete();
+        // Retry once on error
+        if (index === 0 && event.error === 'not-allowed') {
+          setTimeout(() => speakWithDelay(index), 200);
+        } else {
+          setIsSpeaking(false);
+          if (onComplete) onComplete();
+        }
       };
       
       try {
-        window.speechSynthesis.speak(utterance);
+        synthRef.current.speak(utterance);
       } catch (e) {
         console.error('Error speaking:', e);
         setIsSpeaking(false);
@@ -288,7 +313,7 @@ const App = () => {
       }
     };
     
-    speakWithDelay(0);
+    setTimeout(() => speakWithDelay(0), 100);
   };
 
   // Function to pronounce current active word
@@ -298,11 +323,9 @@ const App = () => {
     if (isSpeaking) return;
     if (!voiceSupport) return;
     
-    // Check if voice is selected
     const currentVoice = getCurrentVoice();
     if (!currentVoice) return;
     
-    // Get the current word based on active card
     let currentWord = '';
     if (activeCard === 'singular') {
       currentWord = currentRecord?.singular?.word || '';
@@ -310,7 +333,6 @@ const App = () => {
       currentWord = currentRecord?.plural?.word || '';
     }
     
-    // Check if we already pronounced this specific card
     const currentKey = `${currentIndex}_${activeCard}`;
     if (lastSpokenRef.current === currentKey) return;
     
@@ -322,39 +344,32 @@ const App = () => {
 
   // Function to stop all pulsing and reset study state
   const resetStudyState = (showCompletionAlert = false) => {
-    // Prevent multiple completions
     if (isCompletingRef.current) return;
     
-    // Clear timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
     
-    // Cancel any ongoing speech
-    if (isSpeechSupported()) {
+    if (isSpeechSupported() && synthRef.current) {
       try {
-        window.speechSynthesis.cancel();
+        synthRef.current.cancel();
       } catch (e) {
         console.warn('Error canceling speech:', e);
       }
     }
     setIsSpeaking(false);
     
-    // Reset all state
     setIsStudying(false);
     setTimeRemaining(0);
     setActiveCard('singular');
     
-    // Reset last spoken tracker
     lastSpokenRef.current = { index: -1, card: '' };
     initialStudyStartRef.current = false;
     
-    // Remove pulse from both cards
     setCardPulsing('singular', false);
     setCardPulsing('plural', false);
     
-    // Show completion alert only once
     if (showCompletionAlert && !completionAlertShownRef.current) {
       isCompletingRef.current = true;
       completionAlertShownRef.current = true;
@@ -372,15 +387,12 @@ const App = () => {
     const currentActive = activeCardRef.current;
     const records = allRecordsRef.current;
     
-    // Remove pulse from current card
     setCardPulsing(currentActive, false);
     
     if (currentActive === 'singular') {
       setActiveCard('plural');
-      // Add pulse to new card after state update
       setTimeout(() => {
         setCardPulsing('plural', true);
-        // Pronounce the plural word after card becomes active
         setTimeout(() => pronounceCurrentWord(), 200);
       }, 50);
     } else {
@@ -390,11 +402,9 @@ const App = () => {
         setActiveCard('singular');
         setTimeout(() => {
           setCardPulsing('singular', true);
-          // Pronounce the singular word after card becomes active
           setTimeout(() => pronounceCurrentWord(), 200);
         }, 100);
       } else {
-        // End of study session - reset everything with completion alert
         resetStudyState(true);
       }
     }
@@ -402,10 +412,8 @@ const App = () => {
 
   // Start study timer
   const startStudyTimer = () => {
-    // Reset everything first
     resetStudyState(false);
     
-    // Reset flags
     completionAlertShownRef.current = false;
     isCompletingRef.current = false;
     lastSpokenRef.current = { index: -1, card: '' };
@@ -415,7 +423,6 @@ const App = () => {
     setIsStudying(true);
     setActiveCard('singular');
     
-    // Add continuous pulse to active card
     setTimeout(() => {
       setCardPulsing('singular', true);
     }, 100);
@@ -423,14 +430,11 @@ const App = () => {
     timerIntervalRef.current = setInterval(() => {
       setTimeRemaining(prev => {
         if (prev <= 1) {
-          // Check if this is the last card and we're at the end
           const currentIdx = currentIndexRef.current;
           const currentActive = activeCardRef.current;
           const records = allRecordsRef.current;
           
-          // If this is the last card (plural of last ID) - only move, don't show alert here
           if (currentActive === 'plural' && currentIdx === records.length - 1) {
-            // Just move to next card, which will handle completion
             moveToNextCard();
             return settingsRef.current.studyTime;
           }
@@ -452,12 +456,10 @@ const App = () => {
   useEffect(() => {
     if (isStudying && timerIntervalRef.current) {
       setTimeRemaining(settingsRef.current.studyTime);
-      // Remove pulse from both, then add to active
       setCardPulsing('singular', false);
       setCardPulsing('plural', false);
       setTimeout(() => {
         setCardPulsing(activeCard, true);
-        // Pronounce the word when card changes
         pronounceCurrentWord();
       }, 50);
     }
@@ -470,7 +472,6 @@ const App = () => {
       if (lastSpokenRef.current !== currentKey) {
         const word = currentRecord.singular?.word;
         if (word && word.trim() !== '') {
-          console.log('Initial pronunciation triggered via useEffect:', word);
           lastSpokenRef.current = currentKey;
           speakText(word);
           initialStudyStartRef.current = false;
@@ -485,10 +486,12 @@ const App = () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
-      // Cancel any ongoing speech on unmount
-      if (isSpeechSupported()) {
+      if (voiceLoadTimeoutRef.current) {
+        clearTimeout(voiceLoadTimeoutRef.current);
+      }
+      if (isSpeechSupported() && synthRef.current) {
         try {
-          window.speechSynthesis.cancel();
+          synthRef.current.cancel();
         } catch (e) {
           console.warn('Error canceling speech on unmount:', e);
         }
@@ -575,24 +578,23 @@ const App = () => {
   const handleVoiceChange = (voiceName) => {
     console.log('User selected voice:', voiceName);
     
-    // Store the user's selected voice name persistently
     userSelectedVoiceNameRef.current = voiceName;
-    
     setSettings(prev => ({ ...prev, selectedVoiceName: voiceName }));
     
-    // Update cached voice immediately
     if (voiceName) {
       const voice = availableVoices.find(v => v.name === voiceName);
       if (voice) {
         cachedVoiceRef.current = voice;
         const testText = "Hello! Voice selected successfully.";
         try {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(testText);
-          utterance.voice = voice;
-          utterance.rate = 0.9;
-          utterance.pitch = 1.0;
-          window.speechSynthesis.speak(utterance);
+          if (synthRef.current) {
+            synthRef.current.cancel();
+            const utterance = new SpeechSynthesisUtterance(testText);
+            utterance.voice = voice;
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            synthRef.current.speak(utterance);
+          }
         } catch (e) {
           console.error('Error testing voice:', e);
         }
@@ -606,25 +608,26 @@ const App = () => {
     if (isStudying) {
       stopStudyTimer();
     } else {
-      // Check if a database is loaded
       if (!dbLoaded || allRecords.length === 0) {
         alert('⚠️ No database loaded!\n\nPlease load a database file using the "Load DB" button before starting a study session.');
         return;
       }
       
-      // Check if voice is supported
       if (!isSpeechSupported()) {
         alert('⚠️ Your browser does not support speech synthesis.\n\nPlease use a different browser like Firefox, Chrome, or Edge for voice features.');
         return;
       }
       
-      // Check if voice is selected for pronunciation
+      if (settings.autoPronounce && (!voicesLoaded || availableVoices.length === 0)) {
+        alert('⚠️ Voices not loaded yet!\n\nPlease click the "Load Voices" button in Settings first to enable pronunciation.\n\nThis is required for Edge Android browser.');
+        return;
+      }
+      
       if (settings.autoPronounce && !settings.selectedVoiceName) {
         alert('⚠️ Please select a voice in Settings before starting the study session.\n\nGo to Settings → Voice Settings to select a voice.');
         return;
       }
       
-      // If database is loaded, start study session
       if (dbLoaded && allRecords.length > 0) {
         startStudyTimer();
         if (settings.autoPronounce && settings.selectedVoiceName) {
@@ -649,10 +652,8 @@ const App = () => {
     
     try {
       if (svgCode.includes('<svg')) {
-        // Create a unique ID for this SVG instance
         const scopeId = uniqueId || `svg-${Date.now()}-${Math.random()}`;
         
-        // Insert the SVG
         container.innerHTML = svgCode;
         
         const svgElement = container.querySelector('svg');
@@ -662,16 +663,13 @@ const App = () => {
           svgElement.style.maxWidth = '150px';
           svgElement.style.maxHeight = '150px';
           
-          // Get all style elements in the SVG
           const styleElements = svgElement.querySelectorAll('style');
           styleElements.forEach(style => {
             let styleContent = style.innerHTML;
-            // Replace class selectors with scoped versions
             styleContent = styleContent.replace(/\.st(\d+)/g, `.${scopeId}-st$1`);
             style.innerHTML = styleContent;
           });
           
-          // Update all elements to use scoped classes
           const allElements = svgElement.querySelectorAll('[class]');
           allElements.forEach(el => {
             const oldClass = el.getAttribute('class');
@@ -870,7 +868,6 @@ const App = () => {
       </div>
 
       <div className="page-content">
-        {/* Navigation buttons - Hidden when studying, shown when not studying */}
         {dbLoaded && allRecords.length > 0 && !isStudying && (
           <div className="navigation-buttons">
             <button onClick={prevRecord} className="nav-button">◀ Previous</button>
@@ -955,9 +952,8 @@ const App = () => {
                   <label>Select Voice:</label>
                   <select 
                     value={settings.selectedVoiceName}
-                    onChange={(e) => {
-                      handleVoiceChange(e.target.value);
-                    }}
+                    onChange={(e) => handleVoiceChange(e.target.value)}
+                    disabled={!voicesLoaded}
                     style={{
                       background: '#3c3c3c',
                       border: '1px solid #555',
@@ -966,7 +962,8 @@ const App = () => {
                       borderRadius: '6px',
                       fontSize: '0.9rem',
                       width: '220px',
-                      cursor: 'pointer'
+                      cursor: voicesLoaded ? 'pointer' : 'not-allowed',
+                      opacity: voicesLoaded ? 1 : 0.6
                     }}
                   >
                     <option value="">-- Select a voice --</option>
@@ -976,6 +973,30 @@ const App = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="setting-item">
+                  <button 
+                    onClick={loadVoices}
+                    disabled={isLoadingVoices}
+                    style={{
+                      background: '#0078d4',
+                      border: 'none',
+                      color: 'white',
+                      padding: '0.4rem 0.8rem',
+                      borderRadius: '6px',
+                      cursor: isLoadingVoices ? 'wait' : 'pointer',
+                      fontSize: '0.9rem',
+                      width: 'auto',
+                      marginLeft: '0.5rem'
+                    }}
+                  >
+                    {isLoadingVoices ? 'Loading...' : (voicesLoaded ? '✓ Voices Loaded' : '📢 Load Voices')}
+                  </button>
+                  {!voicesLoaded && (
+                    <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ff9800' }}>
+                      ⚠️ Required for Edge Android - Click to load
+                    </span>
+                  )}
                 </div>
                 <div className="setting-item">
                   <label>Repeat English words:</label>
@@ -999,8 +1020,8 @@ const App = () => {
                   <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
                 </div>
                 <div className="setting-item">
-                  <small style={{ color: '#4caf50', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                    ✓ Current voice: {settings.selectedVoiceName || "None selected"}
+                  <small style={{ color: voicesLoaded ? '#4caf50' : '#ff9800', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                    {voicesLoaded ? `✓ Current voice: ${settings.selectedVoiceName || "None selected"}` : '⚠️ Voices not loaded - Click "Load Voices" button'}
                   </small>
                 </div>
                 {!voiceSupport && (
