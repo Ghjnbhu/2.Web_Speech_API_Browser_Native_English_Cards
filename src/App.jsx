@@ -17,8 +17,6 @@ const App = () => {
   const [availableVoices, setAvailableVoices] = useState([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceSupport, setVoiceSupport] = useState(true);
-  const [voicesLoaded, setVoicesLoaded] = useState(false);
-  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   
   // Settings state
   const [settings, setSettings] = useState({
@@ -31,7 +29,7 @@ const App = () => {
     theme: 'dark',
     studyTime: 10,
     selectedVoiceName: "",
-    repeatTimes: 3,
+    repeatTimes: 3,  // Changed from 1 to 3
     autoPronounce: true
   });
 
@@ -51,9 +49,9 @@ const App = () => {
   const lastSpokenRef = useRef({ index: -1, card: '' });
   const initialStudyStartRef = useRef(false);
   const cachedVoiceRef = useRef(null);
-  const userSelectedVoiceNameRef = useRef("");
+  const userSelectedVoiceNameRef = useRef(""); // Track user's actual selection
+  const isVoicesLoadedRef = useRef(false);
   const voiceLoadAttemptsRef = useRef(0);
-  const voiceLoadTimeoutRef = useRef(null);
 
   // Check if speech synthesis is supported
   const isSpeechSupported = () => {
@@ -64,7 +62,7 @@ const App = () => {
   const getCurrentVoice = () => {
     if (!isSpeechSupported()) return null;
     
-    // Always use the user's selected voice name
+    // Always use the user's selected voice name (not the one that might have been changed)
     const targetVoiceName = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     
     if (!targetVoiceName) return null;
@@ -82,93 +80,52 @@ const App = () => {
     return voice || null;
   };
 
-  // Function to manually load voices with user interaction (required for Edge Android)
-  const loadVoicesManually = () => {
+  // Force load voices with retry mechanism for mobile browsers
+  const forceLoadVoices = () => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
-      alert('⚠️ Your browser does not support speech synthesis.');
       return;
     }
     
-    setIsLoadingVoices(true);
+    // Try to get voices immediately
+    let voices = window.speechSynthesis.getVoices();
     
-    // Clear any existing timeout
-    if (voiceLoadTimeoutRef.current) {
-      clearTimeout(voiceLoadTimeoutRef.current);
-    }
-    
-    const tryLoadVoices = (attempt = 0) => {
-      let voices = [];
-      
-      try {
+    if (voices && voices.length > 0) {
+      handleVoicesLoaded(voices);
+    } else {
+      // For mobile browsers, we need to trigger voice loading
+      // Create a dummy utterance to force voice loading
+      const dummyUtterance = new SpeechSynthesisUtterance('');
+      dummyUtterance.onvoiceschanged = () => {
         voices = window.speechSynthesis.getVoices();
-      } catch (e) {
-        console.warn('Error getting voices:', e);
-      }
-      
-      if (voices && voices.length > 0) {
-        handleVoicesLoaded(voices);
-        setIsLoadingVoices(false);
-        setVoicesLoaded(true);
-        alert(`✅ ${voices.length} voice(s) loaded successfully! You can now select a voice for pronunciation.`);
-        return true;
-      }
-      
-      // For Edge Android, we need to trigger voice loading with a spoken utterance
-      if (attempt < 20) {
-        // Create an utterance with actual text to force voice loading
-        const utterance = new SpeechSynthesisUtterance(' ');
-        utterance.lang = 'en-US';
-        
-        // Set up onvoiceschanged
-        if (window.speechSynthesis.onvoiceschanged !== undefined) {
-          window.speechSynthesis.onvoiceschanged = () => {
-            const newVoices = window.speechSynthesis.getVoices();
-            if (newVoices && newVoices.length > 0) {
-              handleVoicesLoaded(newVoices);
-              setIsLoadingVoices(false);
-              setVoicesLoaded(true);
-              alert(`✅ ${newVoices.length} voice(s) loaded successfully! You can now select a voice for pronunciation.`);
-            }
-          };
+        if (voices && voices.length > 0) {
+          handleVoicesLoaded(voices);
         }
-        
-        // Try to trigger voice loading by speaking and immediately canceling
-        try {
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(utterance);
-          // Cancel immediately to prevent actual speech
-          setTimeout(() => {
-            try {
-              window.speechSynthesis.cancel();
-            } catch (e) {}
-          }, 50);
-        } catch (e) {
-          console.warn('Error triggering speech:', e);
+      };
+      
+      // Try to trigger voice loading
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(dummyUtterance);
+      
+      // Fallback: try multiple times with delay
+      const checkVoices = () => {
+        voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          handleVoicesLoaded(voices);
+        } else if (voiceLoadAttemptsRef.current < 10) {
+          voiceLoadAttemptsRef.current++;
+          setTimeout(checkVoices, 500);
+        } else {
+          console.warn('Could not load voices after multiple attempts');
+          setVoiceSupport(false);
         }
-        
-        // Retry with increasing delay
-        voiceLoadTimeoutRef.current = setTimeout(() => {
-          tryLoadVoices(attempt + 1);
-        }, 200 + (attempt * 50));
-      } else {
-        setIsLoadingVoices(false);
-        alert('⚠️ Could not load voices. Please make sure your device has text-to-speech enabled and try again.\n\nTip: Try tapping the "Load Voices" button again.');
-        setVoiceSupport(false);
-      }
-      return false;
-    };
-    
-    // Start loading attempts
-    tryLoadVoices(0);
+      };
+      
+      setTimeout(checkVoices, 100);
+    }
   };
 
   const handleVoicesLoaded = (voices) => {
-    if (!voices || voices.length === 0) {
-      console.warn('No voices loaded');
-      return;
-    }
-    
     setAvailableVoices(voices);
     
     // CRITICAL: Preserve user's selected voice if it exists
@@ -201,53 +158,40 @@ const App = () => {
       cachedVoiceRef.current = defaultVoice;
       setVoiceSupport(true);
     }
+    
+    isVoicesLoadedRef.current = true;
   };
 
-  // Auto-load voices on component mount (may not work in Edge Android)
+  // Load available voices - with mobile browser support
   useEffect(() => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
       return;
     }
     
-    // Try to load voices automatically (may not work in Edge Android)
-    const autoLoadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices && voices.length > 0) {
-        handleVoicesLoaded(voices);
-        setVoicesLoaded(true);
-      }
-    };
+    // Initial load attempt
+    forceLoadVoices();
     
-    autoLoadVoices();
-    
-    // Listen for voiceschanged event
-    const handleVoicesChanged = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices && voices.length > 0) {
-        handleVoicesLoaded(voices);
-        setVoicesLoaded(true);
-      }
-    };
-    
+    // Also listen for the voiceschanged event (works on desktop and some mobile browsers)
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
+      window.speechSynthesis.onvoiceschanged = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          handleVoicesLoaded(voices);
+        }
+      };
     }
     
+    // Cleanup function
     return () => {
-      if (voiceLoadTimeoutRef.current) {
-        clearTimeout(voiceLoadTimeoutRef.current);
-      }
       if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+        window.speechSynthesis.onvoiceschanged = null;
       }
       if (isSpeechSupported()) {
-        try {
-          window.speechSynthesis.cancel();
-        } catch (e) {}
+        window.speechSynthesis.cancel();
       }
     };
-  }, []);
+  }, []); // Empty dependency array - runs only on mount
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -282,7 +226,7 @@ const App = () => {
     }
   };
 
-  // Enhanced speak function for better mobile compatibility
+  // Function to speak text with repetition
   const speakText = (text, onComplete = null) => {
     if (!text) {
       if (onComplete) onComplete();
@@ -323,22 +267,16 @@ const App = () => {
       utterance.voice = currentVoice;
       utterance.rate = 0.9;
       utterance.pitch = 1.0;
-      utterance.lang = 'en-US';
       
       utterance.onend = () => {
-        // Add a small delay between repetitions for mobile
+        // Add a small delay between repetitions
         setTimeout(() => speakWithDelay(index + 1), 500);
       };
       
       utterance.onerror = (event) => {
         console.error('Speech synthesis error:', event);
-        // For Edge Android, sometimes the first utterance fails, try again
-        if (index === 0 && event.error === 'not-allowed') {
-          setTimeout(() => speakWithDelay(index), 100);
-        } else {
-          setIsSpeaking(false);
-          if (onComplete) onComplete();
-        }
+        setIsSpeaking(false);
+        if (onComplete) onComplete();
       };
       
       try {
@@ -350,8 +288,7 @@ const App = () => {
       }
     };
     
-    // Small delay before speaking for mobile browsers
-    setTimeout(() => speakWithDelay(0), 100);
+    speakWithDelay(0);
   };
 
   // Function to pronounce current active word
@@ -548,9 +485,6 @@ const App = () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
-      if (voiceLoadTimeoutRef.current) {
-        clearTimeout(voiceLoadTimeoutRef.current);
-      }
       // Cancel any ongoing speech on unmount
       if (isSpeechSupported()) {
         try {
@@ -681,12 +615,6 @@ const App = () => {
       // Check if voice is supported
       if (!isSpeechSupported()) {
         alert('⚠️ Your browser does not support speech synthesis.\n\nPlease use a different browser like Firefox, Chrome, or Edge for voice features.');
-        return;
-      }
-      
-      // Check if voices are loaded for Edge Android
-      if (settings.autoPronounce && (!voicesLoaded || availableVoices.length === 0)) {
-        alert('⚠️ Voices not loaded yet!\n\nPlease click the "Load Voices" button in Settings first to enable pronunciation.\n\nThis is required for Edge Android browser.');
         return;
       }
       
@@ -1030,7 +958,6 @@ const App = () => {
                     onChange={(e) => {
                       handleVoiceChange(e.target.value);
                     }}
-                    disabled={!voicesLoaded}
                     style={{
                       background: '#3c3c3c',
                       border: '1px solid #555',
@@ -1039,8 +966,7 @@ const App = () => {
                       borderRadius: '6px',
                       fontSize: '0.9rem',
                       width: '220px',
-                      cursor: voicesLoaded ? 'pointer' : 'not-allowed',
-                      opacity: voicesLoaded ? 1 : 0.6
+                      cursor: 'pointer'
                     }}
                   >
                     <option value="">-- Select a voice --</option>
@@ -1050,30 +976,6 @@ const App = () => {
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="setting-item">
-                  <button 
-                    onClick={loadVoicesManually}
-                    disabled={isLoadingVoices}
-                    style={{
-                      background: '#0078d4',
-                      border: 'none',
-                      color: 'white',
-                      padding: '0.4rem 0.8rem',
-                      borderRadius: '6px',
-                      cursor: isLoadingVoices ? 'wait' : 'pointer',
-                      fontSize: '0.9rem',
-                      width: 'auto',
-                      marginLeft: '0.5rem'
-                    }}
-                  >
-                    {isLoadingVoices ? 'Loading...' : (voicesLoaded ? '✓ Voices Loaded' : '📢 Load Voices')}
-                  </button>
-                  {!voicesLoaded && (
-                    <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ff9800' }}>
-                      ⚠️ Required for Edge Android
-                    </span>
-                  )}
                 </div>
                 <div className="setting-item">
                   <label>Repeat English words:</label>
