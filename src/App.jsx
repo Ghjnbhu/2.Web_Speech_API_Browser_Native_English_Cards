@@ -29,7 +29,7 @@ const App = () => {
     theme: 'dark',
     studyTime: 10,
     selectedVoiceName: "",
-    repeatTimes: 3,  // Changed from 1 to 3
+    repeatTimes: 3,
     autoPronounce: true
   });
 
@@ -49,9 +49,10 @@ const App = () => {
   const lastSpokenRef = useRef({ index: -1, card: '' });
   const initialStudyStartRef = useRef(false);
   const cachedVoiceRef = useRef(null);
-  const userSelectedVoiceNameRef = useRef(""); // Track user's actual selection
+  const userSelectedVoiceNameRef = useRef("");
   const isVoicesLoadedRef = useRef(false);
   const voiceLoadAttemptsRef = useRef(0);
+  const voiceLoadTimeoutRef = useRef(null);
 
   // Check if speech synthesis is supported
   const isSpeechSupported = () => {
@@ -62,7 +63,7 @@ const App = () => {
   const getCurrentVoice = () => {
     if (!isSpeechSupported()) return null;
     
-    // Always use the user's selected voice name (not the one that might have been changed)
+    // Always use the user's selected voice name
     const targetVoiceName = userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     
     if (!targetVoiceName) return null;
@@ -80,52 +81,90 @@ const App = () => {
     return voice || null;
   };
 
-  // Force load voices with retry mechanism for mobile browsers
+  // Enhanced voice loading for mobile browsers (including Edge Android)
   const forceLoadVoices = () => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
       return;
     }
     
-    // Try to get voices immediately
-    let voices = window.speechSynthesis.getVoices();
+    // Clear any existing timeout
+    if (voiceLoadTimeoutRef.current) {
+      clearTimeout(voiceLoadTimeoutRef.current);
+    }
     
-    if (voices && voices.length > 0) {
-      handleVoicesLoaded(voices);
-    } else {
-      // For mobile browsers, we need to trigger voice loading
-      // Create a dummy utterance to force voice loading
-      const dummyUtterance = new SpeechSynthesisUtterance('');
-      dummyUtterance.onvoiceschanged = () => {
+    const tryLoadVoices = (attempt = 0) => {
+      let voices = [];
+      
+      // Try multiple methods to get voices
+      try {
         voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          handleVoicesLoaded(voices);
+      } catch (e) {
+        console.warn('Error getting voices:', e);
+      }
+      
+      if (voices && voices.length > 0) {
+        handleVoicesLoaded(voices);
+        return true;
+      }
+      
+      // For Edge Android and other mobile browsers, we need to trigger voice loading
+      if (attempt < 15) { // Increased attempts for mobile
+        // Create a dummy utterance with text to force voice loading
+        const dummyUtterance = new SpeechSynthesisUtterance(' ');
+        dummyUtterance.lang = 'en-US';
+        
+        // Set up onvoiceschanged if available
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = () => {
+            const newVoices = window.speechSynthesis.getVoices();
+            if (newVoices && newVoices.length > 0) {
+              handleVoicesLoaded(newVoices);
+            }
+          };
         }
-      };
-      
-      // Try to trigger voice loading
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(dummyUtterance);
-      
-      // Fallback: try multiple times with delay
-      const checkVoices = () => {
-        voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          handleVoicesLoaded(voices);
-        } else if (voiceLoadAttemptsRef.current < 10) {
-          voiceLoadAttemptsRef.current++;
-          setTimeout(checkVoices, 500);
+        
+        // Try to trigger voice loading by speaking and immediately canceling
+        try {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(dummyUtterance);
+          // Cancel immediately to prevent actual speech
+          setTimeout(() => {
+            try {
+              window.speechSynthesis.cancel();
+            } catch (e) {}
+          }, 100);
+        } catch (e) {
+          console.warn('Error triggering speech:', e);
+        }
+        
+        // Retry with increasing delay
+        voiceLoadTimeoutRef.current = setTimeout(() => {
+          tryLoadVoices(attempt + 1);
+        }, 300 + (attempt * 100));
+      } else {
+        console.warn('Could not load voices after multiple attempts');
+        // Final attempt: try to get voices one last time
+        const finalVoices = window.speechSynthesis.getVoices();
+        if (finalVoices && finalVoices.length > 0) {
+          handleVoicesLoaded(finalVoices);
         } else {
-          console.warn('Could not load voices after multiple attempts');
           setVoiceSupport(false);
         }
-      };
-      
-      setTimeout(checkVoices, 100);
-    }
+      }
+      return false;
+    };
+    
+    // Start loading attempts
+    tryLoadVoices(0);
   };
 
   const handleVoicesLoaded = (voices) => {
+    if (!voices || voices.length === 0) {
+      console.warn('No voices loaded');
+      return;
+    }
+    
     setAvailableVoices(voices);
     
     // CRITICAL: Preserve user's selected voice if it exists
@@ -160,38 +199,73 @@ const App = () => {
     }
     
     isVoicesLoadedRef.current = true;
+    
+    // Test if voices actually work (for Edge Android)
+    if (cachedVoiceRef.current) {
+      const testUtterance = new SpeechSynthesisUtterance('test');
+      testUtterance.voice = cachedVoiceRef.current;
+      testUtterance.volume = 0; // Silent test
+      try {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(testUtterance);
+      } catch (e) {
+        console.warn('Voice test failed:', e);
+      }
+    }
   };
 
-  // Load available voices - with mobile browser support
+  // Load available voices - enhanced for mobile browsers
   useEffect(() => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
       return;
     }
     
-    // Initial load attempt
+    // Initial load attempt with enhanced method
     forceLoadVoices();
     
-    // Also listen for the voiceschanged event (works on desktop and some mobile browsers)
+    // Also listen for the voiceschanged event (works on some browsers)
+    const handleVoicesChanged = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        handleVoicesLoaded(voices);
+      }
+    };
+    
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
+    }
+    
+    // Fallback: try again after page is fully loaded
+    const handleLoad = () => {
+      setTimeout(() => {
         const voices = window.speechSynthesis.getVoices();
         if (voices && voices.length > 0) {
           handleVoicesLoaded(voices);
+        } else if (!isVoicesLoadedRef.current) {
+          forceLoadVoices();
         }
-      };
-    }
+      }, 1000);
+    };
+    
+    window.addEventListener('load', handleLoad);
     
     // Cleanup function
     return () => {
-      if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.onvoiceschanged = null;
+      if (voiceLoadTimeoutRef.current) {
+        clearTimeout(voiceLoadTimeoutRef.current);
       }
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+      }
+      window.removeEventListener('load', handleLoad);
       if (isSpeechSupported()) {
-        window.speechSynthesis.cancel();
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {}
       }
     };
-  }, []); // Empty dependency array - runs only on mount
+  }, []);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -226,7 +300,7 @@ const App = () => {
     }
   };
 
-  // Function to speak text with repetition
+  // Enhanced speak function for better mobile compatibility
   const speakText = (text, onComplete = null) => {
     if (!text) {
       if (onComplete) onComplete();
@@ -267,16 +341,22 @@ const App = () => {
       utterance.voice = currentVoice;
       utterance.rate = 0.9;
       utterance.pitch = 1.0;
+      utterance.lang = 'en-US';
       
       utterance.onend = () => {
-        // Add a small delay between repetitions
+        // Add a small delay between repetitions for mobile
         setTimeout(() => speakWithDelay(index + 1), 500);
       };
       
       utterance.onerror = (event) => {
         console.error('Speech synthesis error:', event);
-        setIsSpeaking(false);
-        if (onComplete) onComplete();
+        // For Edge Android, sometimes the first utterance fails, try again
+        if (index === 0 && event.error === 'not-allowed') {
+          setTimeout(() => speakWithDelay(index), 100);
+        } else {
+          setIsSpeaking(false);
+          if (onComplete) onComplete();
+        }
       };
       
       try {
@@ -288,7 +368,8 @@ const App = () => {
       }
     };
     
-    speakWithDelay(0);
+    // Small delay before speaking for mobile browsers
+    setTimeout(() => speakWithDelay(0), 100);
   };
 
   // Function to pronounce current active word
@@ -484,6 +565,9 @@ const App = () => {
     return () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
+      }
+      if (voiceLoadTimeoutRef.current) {
+        clearTimeout(voiceLoadTimeoutRef.current);
       }
       // Cancel any ongoing speech on unmount
       if (isSpeechSupported()) {
