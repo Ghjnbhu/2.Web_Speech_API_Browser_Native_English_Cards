@@ -29,7 +29,7 @@ const App = () => {
     theme: 'dark',
     studyTime: 10,
     selectedVoiceName: "",
-    repeatTimes: 1,
+    repeatTimes: 3,  // Changed from 1 to 3
     autoPronounce: true
   });
 
@@ -870,11 +870,11 @@ const App = () => {
       </div>
 
       <div className="page-content">
-        {dbLoaded && allRecords.length > 0 && (
+        {/* Navigation buttons - Hidden when studying, shown when not studying */}
+        {dbLoaded && allRecords.length > 0 && !isStudying && (
           <div className="navigation-buttons">
-            <button onClick={prevRecord} className="nav-button" disabled={isStudying}>◀ Previous ID</button>
-            <span className="nav-counter">ID: {currentRecord?.id || '—'} | {currentIndex + 1} / {allRecords.length}</span>
-            <button onClick={nextRecord} className="nav-button" disabled={isStudying}>Next ID ▶</button>
+            <button onClick={prevRecord} className="nav-button">◀ Previous</button>
+            <button onClick={nextRecord} className="nav-button">Next ▶</button>
           </div>
         )}
 
@@ -982,7 +982,7 @@ const App = () => {
                   <input 
                     type="number" 
                     value={settings.repeatTimes} 
-                    onChange={(e) => handleSettingChange('repeatTimes', parseInt(e.target.value) || 1)} 
+                    onChange={(e) => handleSettingChange('repeatTimes', parseInt(e.target.value) || 3)} 
                     min="1" 
                     max="5" 
                     step="1"
