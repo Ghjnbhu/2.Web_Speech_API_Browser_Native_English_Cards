@@ -231,9 +231,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: space-between;
   color: #fff;
   box-sizing: border-box;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
 }
 
 .card:hover {
@@ -250,32 +252,22 @@ body {
   justify-content: center;
 }
 
-.card-title {
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #fff;
-  margin-bottom: 8px;
-  align-self: flex-start;
-}
-
 .english-word {
   font-size: 32px;
   font-weight: 700;
-  margin-bottom: 4.4px;
+  margin-bottom: 0;
 }
 
 .transcription {
   font-size: 16px;
   color: #fff;
-  margin-bottom: 13.2px;
+  margin-bottom: 0;
 }
 
 .svg-wrapper {
   width: 150px;
   height: 150px;
-  margin: 13.2px 0;
+  margin: 0;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -287,7 +279,8 @@ body {
 }
 
 .translation {
-  margin-top: 13.2px;
+  margin-top: 0;
+  margin-bottom: 0;
   font-size: 18px;
   color: #fff;
 }
@@ -321,7 +314,6 @@ body {
 }
 
 /* ===== PULSE ANIMATION FOR ACTIVE CARD ===== */
-/* Continuous pulse animation for active card during study */
 .active-pulse {
   animation: continuousPulse 1.2s ease-in-out infinite;
   box-shadow: 0 0 20px rgba(76, 175, 80, 0.8);
@@ -346,7 +338,6 @@ body {
   }
 }
 
-/* Single pulse for card transitions */
 .pulse {
   animation: continuousPulse 0.5s ease-in-out;
 }
@@ -508,6 +499,20 @@ body {
   background: #242424;
 }
 
+/* Round corners for Open Settings and Ok buttons - STRONG SELECTOR */
+button.settings-open,
+button.settings-ok {
+  border-radius: 40px !important;
+  padding: 0.6rem 1.2rem;
+  transition: all 0.2s ease;
+}
+
+button.settings-open:hover,
+button.settings-ok:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
 .settings-cancel {
   background: #555;
   color: white;
@@ -536,6 +541,16 @@ body {
 
 .settings-save:hover {
   background: #45a049;
+}
+
+/* Theme button styling */
+.theme-button {
+  background: #ff9800;
+  color: white;
+}
+
+.theme-button:hover {
+  background: #e68900;
 }
 
 /* Animations */
