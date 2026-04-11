@@ -20,7 +20,7 @@ const App = () => {
   const [voicesLoaded, setVoicesLoaded] = useState(false);
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   
-  // Settings state
+  // Settings state - added randomOrder
   const [settings, setSettings] = useState({
     cardWidth: 400,
     cardHeight: 400,
@@ -35,7 +35,8 @@ const App = () => {
     autoPronounce: true,
     pronounceTranslation: false,
     translationVoiceName: "",
-    translationRepeatTimes: 1
+    translationRepeatTimes: 1,
+    randomOrder: false,          // NEW: random order during study
   });
 
   // Refs
@@ -63,6 +64,11 @@ const App = () => {
   // Store study start index and record to return after completion
   const studyStartIndexRef = useRef(0);
   const studyStartRecordRef = useRef(null);
+
+  // NEW: session-specific shuffled list and index
+  const shuffledRecordsRef = useRef([]);
+  const studyIndexRef = useRef(0);      // position in shuffledRecordsRef during study
+  const isRandomSessionRef = useRef(false);
 
   // Hidden file input for loading settings
   const settingsFileInputRef = useRef(null);
@@ -98,7 +104,7 @@ const App = () => {
     return voice || null;
   };
 
-  // Load voices
+  // Load voices (unchanged)
   const loadVoices = () => {
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
@@ -235,6 +241,22 @@ const App = () => {
     }
   };
 
+  // Helper: get the list that is currently active (shuffled if studying with randomOrder)
+  const getActiveRecordList = () => {
+    if (isStudying && isRandomSessionRef.current) {
+      return shuffledRecordsRef.current;
+    }
+    return allRecords;
+  };
+
+  // Helper: get current index in the active list
+  const getActiveIndex = () => {
+    if (isStudying && isRandomSessionRef.current) {
+      return studyIndexRef.current;
+    }
+    return currentIndex;
+  };
+
   const speakText = (text, onComplete = null, voiceNameOverride = null, repeatCountOverride = null) => {
     if (!text) {
       if (onComplete) onComplete();
@@ -300,7 +322,7 @@ const App = () => {
       currentWord = currentRecord?.plural?.word || '';
       currentTranslation = currentRecord?.plural?.translation || '';
     }
-    const currentKey = `${currentIndex}_${activeCard}`;
+    const currentKey = `${getActiveIndex()}_${activeCard}`;
     if (lastSpokenRef.current === currentKey) return;
     if (currentWord && currentWord.trim() !== '') {
       lastSpokenRef.current = currentKey;
@@ -329,14 +351,24 @@ const App = () => {
     setTimeRemaining(0);
     timeRemainingRef.current = 0;
     
-    // If study completed, return to the starting card
-    if (showCompletionAlert && studyStartRecordRef.current) {
-      setCurrentIndex(studyStartIndexRef.current);
-      setCurrentRecord(studyStartRecordRef.current);
-      setActiveCard('singular');
+    // Restore original order
+    if (isRandomSessionRef.current) {
+      // Return to the starting record (original index)
+      if (studyStartRecordRef.current) {
+        setCurrentIndex(studyStartIndexRef.current);
+        setCurrentRecord(studyStartRecordRef.current);
+      }
+      isRandomSessionRef.current = false;
+      shuffledRecordsRef.current = [];
+      studyIndexRef.current = 0;
     } else {
-      setActiveCard('singular');
+      if (showCompletionAlert && studyStartRecordRef.current) {
+        setCurrentIndex(studyStartIndexRef.current);
+        setCurrentRecord(studyStartRecordRef.current);
+      }
     }
+    
+    setActiveCard('singular');
     
     lastSpokenRef.current = { index: -1, card: '' };
     initialStudyStartRef.current = false;
@@ -355,11 +387,23 @@ const App = () => {
     }
   };
 
+  // Fisher–Yates shuffle
+  const shuffleArray = (array) => {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
   const moveToNextCard = () => {
-    const currentIdx = currentIndexRef.current;
+    const records = getActiveRecordList();
+    const currentIdx = isRandomSessionRef.current ? studyIndexRef.current : currentIndexRef.current;
     const currentActive = activeCardRef.current;
-    const records = allRecordsRef.current;
+    
     setCardPulsing(currentActive, false);
+    
     if (currentActive === 'singular') {
       setActiveCard('plural');
       setTimeout(() => {
@@ -368,8 +412,14 @@ const App = () => {
       }, 50);
     } else {
       if (currentIdx < records.length - 1) {
-        setCurrentIndex(currentIdx + 1);
-        setCurrentRecord(records[currentIdx + 1]);
+        const nextIdx = currentIdx + 1;
+        if (isRandomSessionRef.current) {
+          studyIndexRef.current = nextIdx;
+          setCurrentRecord(records[nextIdx]);
+        } else {
+          setCurrentIndex(nextIdx);
+          setCurrentRecord(records[nextIdx]);
+        }
         setActiveCard('singular');
         setTimeout(() => {
           setCardPulsing('singular', true);
@@ -387,7 +437,7 @@ const App = () => {
       timerIntervalRef.current = null;
     }
     
-    // Remember where we started
+    // Remember where we started (original index/record)
     studyStartIndexRef.current = currentIndex;
     studyStartRecordRef.current = currentRecord;
     
@@ -397,18 +447,33 @@ const App = () => {
     isCompletingRef.current = false;
     lastSpokenRef.current = { index: -1, card: '' };
     initialStudyStartRef.current = true;
+    
+    // Handle random order
+    if (settings.randomOrder && allRecords.length > 0) {
+      const shuffled = shuffleArray(allRecords);
+      shuffledRecordsRef.current = shuffled;
+      isRandomSessionRef.current = true;
+      studyIndexRef.current = 0;
+      // Set current record to first shuffled item
+      setCurrentRecord(shuffled[0]);
+    } else {
+      isRandomSessionRef.current = false;
+    }
+    
     const initialTime = settingsRef.current.studyTime;
     setTimeRemaining(initialTime);
     timeRemainingRef.current = initialTime;
     setIsStudying(true);
     setActiveCard('singular');
     setTimeout(() => setCardPulsing('singular', true), 100);
+    
     timerIntervalRef.current = setInterval(() => {
       const currentTime = timeRemainingRef.current;
       if (currentTime <= 1) {
-        const currentIdx = currentIndexRef.current;
+        const records = getActiveRecordList();
+        const currentIdx = isRandomSessionRef.current ? studyIndexRef.current : currentIndexRef.current;
         const currentActive = activeCardRef.current;
-        const records = allRecordsRef.current;
+        
         if (currentActive === 'plural' && currentIdx === records.length - 1) {
           resetStudyState(true);
           if (timerIntervalRef.current) {
@@ -453,7 +518,7 @@ const App = () => {
 
   useEffect(() => {
     if (isStudying && initialStudyStartRef.current && currentRecord && activeCard === 'singular') {
-      const currentKey = `${currentIndex}_singular`;
+      const currentKey = `${getActiveIndex()}_singular`;
       if (lastSpokenRef.current !== currentKey) {
         const word = currentRecord.singular?.word;
         if (word && word.trim() !== '') {
@@ -492,28 +557,32 @@ const App = () => {
     handleSettingChange('theme', newTheme);
     applyThemeToDOM(newTheme);
   };
-
-  const applyThemeToDOM = (theme) => {
-    if (theme === 'light') {
-      document.body.style.background = '#f5f5f5';
-      document.querySelectorAll('.card').forEach(card => {
-        card.style.background = '#ffffff';
-        card.style.color = '#333';
-      });
-      document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
-        el.style.color = '#333';
-      });
-    } else {
-      document.body.style.background = '#000';
-      document.querySelectorAll('.card').forEach(card => {
-        card.style.background = '#4f4949';
-        card.style.color = '#fff';
-      });
-      document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
-        el.style.color = '#fff';
-      });
-    }
-  };
+const applyThemeToDOM = (theme) => {
+  if (theme === 'light') {
+    document.body.style.background = '#f5f5f5';
+    document.querySelectorAll('.card').forEach(card => {
+      card.style.background = '#ffffff';
+      card.style.color = '#333';
+      // Green border for visibility in light theme
+      card.style.border = '1px solid #4caf50';   // <-- Changed to green
+      card.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+    });
+    document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
+      el.style.color = '#333';
+    });
+  } else {
+    document.body.style.background = '#000';
+    document.querySelectorAll('.card').forEach(card => {
+      card.style.background = '#4f4949';
+      card.style.color = '#fff';
+      card.style.border = 'none';
+      card.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)';
+    });
+    document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
+      el.style.color = '#fff';
+    });
+  }
+};
 
   // Apply all visual settings to DOM
   const applyVisualSettings = () => {
@@ -550,7 +619,8 @@ const App = () => {
         const allowedKeys = [
           'cardWidth', 'cardHeight', 'cardGap', 'showTranscription', 'showTranslation',
           'fontSize', 'theme', 'studyTime', 'selectedVoiceName', 'repeatTimes',
-          'autoPronounce', 'pronounceTranslation', 'translationVoiceName', 'translationRepeatTimes'
+          'autoPronounce', 'pronounceTranslation', 'translationVoiceName', 'translationRepeatTimes',
+          'randomOrder'
         ];
         Object.keys(newSettings).forEach(key => {
           if (!allowedKeys.includes(key)) delete newSettings[key];
@@ -681,7 +751,7 @@ const App = () => {
       if (dbLoaded && allRecords.length > 0) {
         startStudyTimer();
         if (settings.autoPronounce && settings.selectedVoiceName) {
-          alert(`📖 Study session started!\n\nWords will be pronounced ${settings.repeatTimes} time(s) with: ${settings.selectedVoiceName}\n\nCards will pulse continuously while being studied.`);
+          alert(`📖 Study session started!\n\nWords will be pronounced ${settings.repeatTimes} time(s) with: ${settings.selectedVoiceName}\n\nCards will pulse continuously while being studied.${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`);
         } else if (settings.autoPronounce && !settings.selectedVoiceName) {
           alert('📖 Study session started! But no voice selected. Words will not be pronounced.\n\nGo to Settings → Voice Settings to select a voice.');
         } else {
@@ -1005,6 +1075,13 @@ const App = () => {
                     Auto-pronounce words during study
                   </label>
                 </div>
+                {/* NEW: Random order checkbox */}
+                <div className="setting-item checkbox">
+                  <label>
+                    <input type="checkbox" checked={settings.randomOrder} onChange={(e) => handleSettingChange('randomOrder', e.target.checked)} /> 
+                    Random pair of cards study (shuffle all records)
+                  </label>
+                </div>
                 <div className="setting-item">
                   <small style={{ color: '#aaa', fontSize: '0.7rem' }}>⏱️ Each card pulses continuously during study</small>
                 </div>
@@ -1078,13 +1155,7 @@ const App = () => {
 
       {isMenuOpen && (
         <div className="menu-dropdown">
-          <div className="menu-item" onClick={handleMainAction}>{isStudying ? 'Stop Study' : 'Start Study'}</div>
-          <div className="menu-item" onClick={loadDatabaseFromFile}>Load Database</div>
-          <div className="menu-item" onClick={prevRecord}>Previous ID</div>
-          <div className="menu-item" onClick={nextRecord}>Next ID</div>
-          <div className="menu-item" onClick={stopStudyTimer}>Stop Study</div>
           <div className="menu-item">Home</div>
-          <div className="menu-item">Words</div>
           <div className="menu-item" onClick={openSettings}>⚙️ Settings</div>
           <div className="menu-item">About</div>
         </div>
