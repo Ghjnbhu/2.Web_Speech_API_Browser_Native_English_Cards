@@ -1,4 +1,4 @@
-// App.js - SIMPLE FIX: Disable Start button when speaking
+// App.js - FIXED for Edge Android speech synthesis
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
@@ -70,6 +70,8 @@ const App = () => {
   const studyIndexRef = useRef(0);
   const isRandomSessionRef = useRef(false);
   const settingsFileInputRef = useRef(null);
+  const lastSpokenRef = useRef({ index: -1, card: '' });
+  const cachedVoiceRef = useRef(null);
 
   useEffect(() => {
     currentRecordRef.current = currentRecord;
@@ -109,7 +111,14 @@ const App = () => {
     const targetVoiceName = voiceName || userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     if (!targetVoiceName) return null;
     
+    if (cachedVoiceRef.current && cachedVoiceRef.current.name === targetVoiceName) {
+      return cachedVoiceRef.current;
+    }
+    
     const voice = availableVoices.find(voice => voice.name === targetVoiceName);
+    if (voice) {
+      cachedVoiceRef.current = voice;
+    }
     return voice || null;
   };
 
@@ -130,9 +139,13 @@ const App = () => {
         setIsLoadingVoices(false);
         
         if (!settings.selectedVoiceName && voices.length > 0) {
-          const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+          // Prefer Google voices for Android
+          const defaultVoice = voices.find(voice => 
+            voice.lang === 'en-US' && voice.name.includes('Google')
+          ) || voices.find(voice => voice.lang === 'en-US') || voices[0];
           if (defaultVoice) {
             setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+            cachedVoiceRef.current = defaultVoice;
           }
         }
         
@@ -153,9 +166,12 @@ const App = () => {
         setIsLoadingVoices(false);
         
         if (!settings.selectedVoiceName && voices.length > 0) {
-          const defaultVoice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+          const defaultVoice = voices.find(voice => 
+            voice.lang === 'en-US' && voice.name.includes('Google')
+          ) || voices.find(voice => voice.lang === 'en-US') || voices[0];
           if (defaultVoice) {
             setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
+            cachedVoiceRef.current = defaultVoice;
           }
         }
         
@@ -246,6 +262,7 @@ const App = () => {
     }
   };
 
+  // FIXED speakText for Edge Android - added cancel() at the beginning
   const speakText = (text, onComplete = null, voiceNameOverride = null, repeatCountOverride = null) => {
     if (!text) {
       if (onComplete) onComplete();
@@ -256,6 +273,10 @@ const App = () => {
       if (onComplete) onComplete();
       return;
     }
+    
+    // CRITICAL FIX FOR EDGE ANDROID: Cancel any pending speech before starting new
+    try { synthRef.current.cancel(); } catch (err) {}
+    
     const currentVoice = getCurrentVoice(voiceNameOverride);
     if (!currentVoice) {
       console.warn('No voice selected for pronunciation');
@@ -265,34 +286,51 @@ const App = () => {
     
     const repeatCount = repeatCountOverride !== null ? repeatCountOverride : (settings.repeatTimes || 1);
     setIsSpeaking(true);
-    const speakWithDelay = (index) => {
-      if (index >= repeatCount) {
+    
+    let currentRepeatIndex = 0;
+    
+    const speakNext = () => {
+      if (currentRepeatIndex >= repeatCount) {
         setIsSpeaking(false);
         if (onComplete) onComplete();
         return;
       }
+      
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.voice = currentVoice;
       utterance.rate = 0.9;
       utterance.pitch = 1.0;
       utterance.lang = currentVoice.lang;
-      utterance.onend = () => setTimeout(() => speakWithDelay(index + 1), 500);
+      
+      utterance.onend = () => {
+        currentRepeatIndex++;
+        // Longer delay for mobile browsers
+        setTimeout(speakNext, 800);
+      };
+      
       utterance.onerror = (event) => {
         console.error('Speech synthesis error:', event);
-        if (index === 0 && event.error === 'not-allowed') {
-          setTimeout(() => speakWithDelay(index), 200);
+        if (event.error === 'not-allowed' || event.error === 'interrupted') {
+          setTimeout(() => {
+            currentRepeatIndex++;
+            setTimeout(speakNext, 500);
+          }, 200);
         } else {
           setIsSpeaking(false);
           if (onComplete) onComplete();
         }
       };
-      try { synthRef.current.speak(utterance); } catch (err) {
+      
+      try {
+        synthRef.current.speak(utterance);
+      } catch (err) {
         console.error('Error speaking:', err);
         setIsSpeaking(false);
         if (onComplete) onComplete();
       }
     };
-    setTimeout(() => speakWithDelay(0), 100);
+    
+    setTimeout(speakNext, 100);
   };
 
   const getCurrentWordFromRefs = () => {
@@ -330,6 +368,11 @@ const App = () => {
     const currentCard = activeCardForSpeechRef.current;
     const currentIdx = isRandomSessionForSpeechRef.current ? studyIndexForSpeechRef.current : currentIndexForSpeechRef.current;
     const currentSettings = settingsForSpeechRef.current;
+    
+    // Prevent duplicate pronunciation
+    const currentKey = `${currentIdx}_${currentCard}`;
+    if (lastSpokenRef.current === currentKey) return;
+    lastSpokenRef.current = currentKey;
     
     if (!word || word.trim() === '') {
       console.log(`No word to pronounce for ${currentCard} at index ${currentIdx}, moving to next`);
@@ -420,6 +463,7 @@ const App = () => {
     setIsStudying(false);
     setTimeRemaining(0);
     timeRemainingRef.current = 0;
+    lastSpokenRef.current = { index: -1, card: '' };
     
     if (isRandomSessionRef.current) {
       if (studyStartRecordRef.current) {
@@ -474,6 +518,7 @@ const App = () => {
     
     completionAlertShownRef.current = false;
     isCompletingRef.current = false;
+    lastSpokenRef.current = { index: -1, card: '' };
     
     if (settings.randomOrder && allRecords.length > 0) {
       const shuffled = shuffleArray(allRecords);
@@ -661,6 +706,7 @@ const App = () => {
         setTimeout(() => {
           applyVisualSettings();
           userSelectedVoiceNameRef.current = newSettings.selectedVoiceName || "";
+          cachedVoiceRef.current = null;
         }, 0);
         alert('✅ Settings loaded successfully!');
       } catch (err) {
@@ -737,6 +783,7 @@ const App = () => {
     if (voiceName) {
       const voice = availableVoices.find(v => v.name === voiceName);
       if (voice) {
+        cachedVoiceRef.current = voice;
         const testText = "Hello! Voice selected successfully.";
         try {
           if (synthRef.current) {
@@ -749,11 +796,13 @@ const App = () => {
           }
         } catch (err) { console.error('Error testing voice:', err); }
       }
+    } else {
+      cachedVoiceRef.current = null;
     }
   };
 
   const handleMainAction = () => {
-    // SIMPLE FIX: Don't allow starting if navigation speech is in progress
+    // Don't allow starting if navigation speech is in progress
     if (!isStudying && isSpeaking) {
       alert('⚠️ Please wait for current pronunciation to finish before starting a study session.');
       return;
@@ -771,11 +820,11 @@ const App = () => {
         return;
       }
       if (settings.autoPronounce && (!voicesLoaded || availableVoices.length === 0)) {
-        alert('⚠️ Voices not loaded yet!\n\nPlease click the "Load Voices" button in Settings first to enable pronunciation.');
+        alert('⚠️ Voices not loaded yet!\n\nPlease click the "Load Voices" button in Settings first to enable pronunciation.\n\nThis is required for Edge Android browser.');
         return;
       }
       if (settings.autoPronounce && !settings.selectedVoiceName) {
-        alert('⚠️ Please select a voice in Settings before starting the study session.');
+        alert('⚠️ Please select a voice in Settings before starting the study session.\n\nGo to Settings → Voice Settings to select a voice.');
         return;
       }
       if (dbLoaded && allRecords.length > 0) {
