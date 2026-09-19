@@ -1,4 +1,4 @@
-// App.jsx - FIXED: cancel speech on navigation
+// App.jsx - FIXED: added "Show SVG canvas border" setting
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
@@ -27,6 +27,7 @@ const App = () => {
     showTranscription: true,
     showTranslation: true,
     fontSize: 32,
+    showSvgBorder: false,          // ← NEW
     theme: 'dark',
     studyTime: 10,
     selectedVoiceName: "",
@@ -73,7 +74,6 @@ const App = () => {
   const lastSpokenRef = useRef('');
   const cachedVoiceRef = useRef(null);
 
-  // Speech generation counter — invalidates stale speech callbacks
   const speechGenerationRef = useRef(0);
 
   useEffect(() => {
@@ -108,13 +108,10 @@ const App = () => {
     return typeof window !== 'undefined' && window.speechSynthesis !== undefined;
   };
 
-  // ========================
-  // Cancel all speech — bumps generation, cancels engine, resets state
-  // ========================
   const cancelAllSpeech = () => {
-    speechGenerationRef.current++;                        // invalidate all pending callbacks
-    try { synthRef.current?.cancel(); } catch (err) { }   // stop current audio
-    setIsSpeaking(false);                                 // clear busy flag
+    speechGenerationRef.current++;
+    try { synthRef.current?.cancel(); } catch (err) { }
+    setIsSpeaking(false);
   };
 
   const getCurrentVoice = (voiceName = null) => {
@@ -273,9 +270,6 @@ const App = () => {
     }
   };
 
-  // ========================
-  // speakText with generation counter
-  // ========================
   const speakText = (text, onComplete = null, voiceNameOverride = null, repeatCountOverride = null) => {
     if (!text) {
       if (onComplete) onComplete();
@@ -673,15 +667,15 @@ const App = () => {
   };
 
   const applyThemeToDOM = (theme) => {
-  // ✅ Add theme class so CSS `body.light …` rules apply
     document.body.classList.remove('light', 'dark');
     document.body.classList.add(theme);
+
     if (theme === 'light') {
       document.body.style.background = '#f5f5f5';
       document.querySelectorAll('.card').forEach(card => {
         card.style.background = '#ffffff';
         card.style.color = '#333';
-        card.style.border = '1px solid #4caf50';
+        card.style.border = '1px solid #e0e0e0';
         card.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
       });
       document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
@@ -711,10 +705,23 @@ const App = () => {
     if (cardsRow) cardsRow.style.gap = `${settings.cardGap}px`;
     const englishWords = document.querySelectorAll('.english-word');
     englishWords.forEach(word => word.style.fontSize = `${settings.fontSize}px`);
+
     const transcriptions = document.querySelectorAll('.transcription');
     transcriptions.forEach(trans => trans.style.display = settings.showTranscription ? 'block' : 'none');
+
     const translations = document.querySelectorAll('.translation');
     translations.forEach(trans => trans.style.display = settings.showTranslation ? 'block' : 'none');
+
+    // ✅ NEW: toggle SVG border class
+    const svgWrappers = document.querySelectorAll('.svg-wrapper');
+    svgWrappers.forEach(wrapper => {
+      if (settings.showSvgBorder) {
+        wrapper.classList.add('svg-bordered');
+      } else {
+        wrapper.classList.remove('svg-bordered');
+      }
+    });
+
     applyThemeToDOM(settings.theme);
   };
 
@@ -733,7 +740,8 @@ const App = () => {
         delete newSettings.savedAt;
         const allowedKeys = [
           'cardWidth', 'cardHeight', 'cardGap', 'showTranscription', 'showTranslation',
-          'fontSize', 'theme', 'studyTime', 'selectedVoiceName', 'repeatTimes',
+          'fontSize', 'showSvgBorder',           // ← NEW
+          'theme', 'studyTime', 'selectedVoiceName', 'repeatTimes',
           'autoPronounce', 'pronounceTranslation', 'translationVoiceName', 'translationRepeatTimes',
           'randomOrder'
         ];
@@ -893,8 +901,6 @@ const App = () => {
         if (svgElement) {
           svgElement.setAttribute('width', '100%');
           svgElement.setAttribute('height', '100%');
-          svgElement.style.maxWidth = '150px';
-          svgElement.style.maxHeight = '150px';
           const styleElements = svgElement.querySelectorAll('style');
           styleElements.forEach(style => {
             let styleContent = style.innerHTML;
@@ -921,7 +927,6 @@ const App = () => {
 
   const loadDatabaseFromFile = async () => {
     if (isStudying) stopStudyTimer();
-    // ✅ Cancel ongoing speech before replacing the DB
     cancelAllSpeech();
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -1015,14 +1020,9 @@ const App = () => {
     fileInput.click();
   };
 
-  // ========================
-  // FIXED: nextRecord / prevRecord cancel ongoing speech
-  // ========================
   const nextRecord = () => {
     if (allRecords.length > 0 && currentIndex < allRecords.length - 1 && !isStudying) {
-      // ✅ Cancel any ongoing speech before navigating
       cancelAllSpeech();
-
       clearManualPulse();
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
@@ -1033,9 +1033,7 @@ const App = () => {
 
   const prevRecord = () => {
     if (allRecords.length > 0 && currentIndex > 0 && !isStudying) {
-      // ✅ Cancel any ongoing speech before navigating
       cancelAllSpeech();
-
       clearManualPulse();
       const newIndex = currentIndex - 1;
       setCurrentIndex(newIndex);
@@ -1145,17 +1143,33 @@ const App = () => {
       <div className="page-content">
         <div className="cards-row">
           <div ref={singularCardRef} className="card" onClick={() => handleCardClick('singular')}>
-            <div className="english-word">{dbLoaded && currentRecord?.singular?.word ? currentRecord.singular.word : ""}</div>
-            <div className="transcription">{dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}</div>
-            <div className="svg-wrapper" ref={singularSvgRef}></div>
-            <div className="translation">{dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}</div>
+            <div className="english-word">
+              {dbLoaded && currentRecord?.singular?.word ? currentRecord.singular.word : ""}
+            </div>
+            <div className="card-content">
+              <div className="transcription">
+                {dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}
+              </div>
+              <div className="svg-wrapper" ref={singularSvgRef}></div>
+            </div>
+            <div className="translation">
+              {dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}
+            </div>
           </div>
 
           <div ref={pluralCardRef} className="card" onClick={() => handleCardClick('plural')}>
-            <div className="english-word">{dbLoaded && currentRecord?.plural?.word ? currentRecord.plural.word : ""}</div>
-            <div className="transcription">{dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}</div>
-            <div className="svg-wrapper" ref={pluralSvgRef}></div>
-            <div className="translation">{dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}</div>
+            <div className="english-word">
+              {dbLoaded && currentRecord?.plural?.word ? currentRecord.plural.word : ""}
+            </div>
+            <div className="card-content">
+              <div className="transcription">
+                {dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}
+              </div>
+              <div className="svg-wrapper" ref={pluralSvgRef}></div>
+            </div>
+            <div className="translation">
+              {dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}
+            </div>
           </div>
         </div>
       </div>
@@ -1185,6 +1199,17 @@ const App = () => {
                 <div className="setting-item">
                   <label>Font Size (px):</label>
                   <input type="number" value={settings.fontSize} onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)} min="20" max="48" step="2" />
+                </div>
+                {/* ✅ NEW checkbox */}
+                <div className="setting-item checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.showSvgBorder}
+                      onChange={(e) => handleSettingChange('showSvgBorder', e.target.checked)}
+                    />
+                    Show SVG canvas border
+                  </label>
                 </div>
               </div>
 
