@@ -1,4 +1,4 @@
-// App.jsx - FIXED: added "Show SVG canvas border" setting
+// App.jsx - FIXED: hide arrows + Load DB during study, keep layout stable
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
@@ -27,7 +27,7 @@ const App = () => {
     showTranscription: true,
     showTranslation: true,
     fontSize: 32,
-    showSvgBorder: false,          // ← NEW
+    showSvgBorder: false,
     theme: 'dark',
     studyTime: 10,
     selectedVoiceName: "",
@@ -712,7 +712,6 @@ const App = () => {
     const translations = document.querySelectorAll('.translation');
     translations.forEach(trans => trans.style.display = settings.showTranslation ? 'block' : 'none');
 
-    // ✅ NEW: toggle SVG border class
     const svgWrappers = document.querySelectorAll('.svg-wrapper');
     svgWrappers.forEach(wrapper => {
       if (settings.showSvgBorder) {
@@ -740,7 +739,7 @@ const App = () => {
         delete newSettings.savedAt;
         const allowedKeys = [
           'cardWidth', 'cardHeight', 'cardGap', 'showTranscription', 'showTranslation',
-          'fontSize', 'showSvgBorder',           // ← NEW
+          'fontSize', 'showSvgBorder',
           'theme', 'studyTime', 'selectedVoiceName', 'repeatTimes',
           'autoPronounce', 'pronounceTranslation', 'translationVoiceName', 'translationRepeatTimes',
           'randomOrder'
@@ -1109,6 +1108,7 @@ const App = () => {
               <button className="menu-button" onClick={handleMenuClick}>Menu</button>
             )}
           </div>
+
           {dbLoaded && currentRecord && (
             <div className="header-db-info">
               <span className="db-info-label">📁</span>
@@ -1123,17 +1123,45 @@ const App = () => {
               )}
             </div>
           )}
+
+          {/* ✅ FIXED: arrows + Load DB hidden during study (keep layout), Stop takes Start's slot */}
           <div className="header-buttons">
-            {dbLoaded && allRecords.length > 0 && !isStudying && (
+            {dbLoaded && allRecords.length > 0 && (
               <>
-                <button onClick={prevRecord} className="nav-button" style={{ background: '#0078d4', padding: '6px 12px' }}>◀</button>
-                <button onClick={nextRecord} className="nav-button" style={{ background: '#0078d4', padding: '6px 12px' }}>▶</button>
+                <button
+                  onClick={prevRecord}
+                  className={`nav-button ${isStudying ? 'hidden-but-reserved' : ''}`}
+                  style={{ background: '#0078d4', padding: '6px 12px' }}
+                  disabled={isStudying}
+                >
+                  ◀
+                </button>
+                <button
+                  onClick={nextRecord}
+                  className={`nav-button ${isStudying ? 'hidden-but-reserved' : ''}`}
+                  style={{ background: '#0078d4', padding: '6px 12px' }}
+                  disabled={isStudying}
+                >
+                  ▶
+                </button>
               </>
             )}
-            <button className={isStudying ? "stop-button" : "start-button"} onClick={handleMainAction} disabled={isLoading}>
-              {isStudying ? '⏹️ Stop' : '🚀 Start'}
-            </button>
-            <button className="load-db-button" onClick={loadDatabaseFromFile} disabled={isLoading}>
+
+            {dbLoaded && allRecords.length > 0 && (
+              <button
+                className={isStudying ? "stop-button" : "start-button"}
+                onClick={handleMainAction}
+                disabled={isLoading}
+              >
+                {isStudying ? '⏹️ Stop' : '🚀 Start'}
+              </button>
+            )}
+
+            <button
+              className={`load-db-button ${isStudying ? 'hidden-but-reserved' : ''}`}
+              onClick={loadDatabaseFromFile}
+              disabled={isLoading || isStudying}
+            >
               {isLoading ? 'Loading...' : '📂 Load DB'}
             </button>
           </div>
@@ -1200,7 +1228,6 @@ const App = () => {
                   <label>Font Size (px):</label>
                   <input type="number" value={settings.fontSize} onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)} min="20" max="48" step="2" />
                 </div>
-                {/* ✅ NEW checkbox */}
                 <div className="setting-item checkbox">
                   <label>
                     <input
