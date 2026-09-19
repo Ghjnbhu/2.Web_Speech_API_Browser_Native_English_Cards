@@ -101,7 +101,7 @@ body {
   gap: 0.5rem;
 }
 
-/* Start button styling */
+/* ===== START BUTTON (normal weight) ===== */
 .start-button {
   background: rgba(76, 175, 80, 0.2);
   border: 1px solid rgba(76, 175, 80, 0.5);
@@ -112,7 +112,7 @@ body {
   font-size: 14px;
   transition: all 0.3s ease;
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: 400;               /* ← normal, not bold */
 }
 
 .start-button:hover:not(:disabled) {
@@ -126,7 +126,7 @@ body {
   cursor: not-allowed;
 }
 
-/* Stop button styling */
+/* ===== STOP BUTTON (still slightly bold for contrast) ===== */
 .stop-button {
   background: rgba(244, 67, 54, 0.2);
   border: 1px solid rgba(244, 67, 54, 0.5);
@@ -151,7 +151,7 @@ body {
   cursor: not-allowed;
 }
 
-/* Load DB button styling */
+/* ===== LOAD DB BUTTON (normal weight) ===== */
 .load-db-button {
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -162,6 +162,7 @@ body {
   font-size: 14px;
   transition: all 0.3s ease;
   white-space: nowrap;
+  font-weight: 400;               /* ← normal, not bold */
 }
 
 .load-db-button:hover {
@@ -499,7 +500,7 @@ body {
   background: #242424;
 }
 
-/* Round corners for Open Settings and Ok buttons - STRONG SELECTOR */
+/* Round corners for Open Settings and Ok buttons */
 button.settings-open,
 button.settings-ok {
   border-radius: 40px !important;
@@ -555,12 +556,8 @@ button.settings-ok:hover {
 
 /* Animations */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideUp {
@@ -574,102 +571,194 @@ button.settings-ok:hover {
   }
 }
 
+/* ====================== */
+/* ===== DAY MODE ====== */
+/* ====================== */
+
+body.light {
+  background: #f5f5f5;
+  color: #333;
+}
+
+body.light .top-bar {
+  background: #ffffff;
+  color: #333;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+body.light .header-title {
+  color: #333;
+}
+
+body.light .header-db-info {
+  background: rgba(0, 120, 212, 0.1);
+  border: 1px solid rgba(0, 120, 212, 0.3);
+  color: #333;
+}
+
+body.light .db-info-name,
+body.light .db-info-id,
+body.light .db-info-label {
+  color: #333;
+}
+
+body.light .card {
+  background: #ffffff;
+  color: #333;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+body.light .english-word,
+body.light .transcription,
+body.light .translation {
+  color: #333;
+}
+
+body.light .menu-button {
+  background: #0078d4;
+  color: #ffffff;
+  border: 1px solid #0078d4;
+}
+
+body.light .menu-button:hover {
+  background: #005a9e;
+}
+
+/* ===== START BUTTON — blue in Day mode, normal weight ===== */
+body.light .start-button {
+  background: #e3f2fd;
+  border: 1px solid #0078d4;
+  color: #0d47a1;
+  font-weight: 400;               /* ← normal, not bold */
+}
+
+body.light .start-button:hover:not(:disabled) {
+  background: #bbdefb;
+  border-color: #005a9e;
+  color: #0d47a1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 120, 212, 0.2);
+}
+
+body.light .start-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== STOP BUTTON (Day mode) — still bold for contrast ===== */
+body.light .stop-button {
+  background: #ffebee;
+  border: 1px solid #f44336;
+  color: #c62828;
+  font-weight: 500;
+}
+
+body.light .stop-button:hover:not(:disabled) {
+  background: #ffcdd2;
+  border-color: #c62828;
+  color: #b71c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.2);
+}
+
+body.light .stop-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== LOAD DB BUTTON — blue bg, BLACK text in Day mode ===== */
+body.light .load-db-button {
+  background: #e3f2fd;
+  border: 1px solid #0078d4;
+  color: #000000;                        /* ← black text */
+  font-weight: 400;
+}
+
+body.light .load-db-button:hover:not(:disabled) {
+  background: #bbdefb;
+  border-color: #005a9e;
+  color: #000000;                        /* ← black text on hover */
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 120, 212, 0.2);
+}
+
+body.light .load-db-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== NAV BUTTONS — solid blue ===== */
+body.light .nav-button {
+  background: #0078d4;
+  color: #ffffff;
+  border: none;
+}
+
+body.light .nav-button:hover:not(:disabled) {
+  background: #005a9e;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 120, 212, 0.3);
+}
+
+body.light .nav-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+body.light .theme-button {
+  background: #ff9800;
+  color: #ffffff;
+  border: none;
+}
+
+body.light .theme-button:hover {
+  background: #e68900;
+}
+
+body.light .nav-counter {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border: 1px solid #0078d4;
+}
+
+body.light .active-pulse {
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.6);
+  border: 2px solid #4caf50;
+}
+
 /* ===== RESPONSIVE ADJUSTMENTS ===== */
 @media (max-width: 960px) {
-  .top-bar-wrapper {
-    width: 90%;
-  }
-  .cards-row {
-    width: 90%;
-    flex-wrap: wrap;
-  }
-  .card {
-    width: 100%;
-    max-width: 450px;
-  }
-  .top-bar {
-    flex-wrap: wrap;
-    height: auto;
-    gap: 0.5rem;
-  }
-  .header-left {
-    flex: 1;
-  }
-  .header-db-info {
-    order: 2;
-  }
-  .header-buttons {
-    order: 3;
-    width: 100%;
-    justify-content: flex-end;
-  }
-  .page-content {
-    padding: 10px 0 16px;
-  }
-  .nav-counter {
-    min-width: 100px;
-    font-size: 12px;
-    padding: 6px 12px;
-  }
+  .top-bar-wrapper { width: 90%; }
+  .cards-row { width: 90%; flex-wrap: wrap; }
+  .card { width: 100%; max-width: 450px; }
+  .top-bar { flex-wrap: wrap; height: auto; gap: 0.5rem; }
+  .header-left { flex: 1; }
+  .header-db-info { order: 2; }
+  .header-buttons { order: 3; width: 100%; justify-content: flex-end; }
+  .page-content { padding: 10px 0 16px; }
+  .nav-counter { min-width: 100px; font-size: 12px; padding: 6px 12px; }
 }
 
 @media (max-width: 600px) {
-  .card {
-    width: 100%;
-  }
-  .header-db-info {
-    font-size: 0.7rem;
-    padding: 0.2rem 0.5rem;
-  }
+  .card { width: 100%; }
+  .header-db-info { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
   .db-info-name {
     max-width: 100px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .navigation-buttons {
-    margin: 0 0 0.75rem 0;
-    gap: 0.5rem;
-  }
-  .nav-button {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
-  .nav-counter {
-    min-width: 90px;
-    font-size: 11px;
-    padding: 5px 8px;
-  }
-  .page-content {
-    padding: 8px 0 16px;
-  }
-  .start-button, .stop-button, .load-db-button {
-    padding: 4px 10px;
-    font-size: 12px;
-  }
-  .header-buttons {
-    gap: 0.3rem;
-  }
-  .settings-modal {
-    width: 95%;
-    max-height: 90vh;
-  }
-  .setting-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-  .setting-item input[type="number"] {
-    width: 100%;
-  }
-  .setting-item.radio-group {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .settings-footer {
-    flex-direction: column;
-  }
-  .settings-cancel, .settings-save {
-    width: 100%;
-  }
+  .navigation-buttons { margin: 0 0 0.75rem 0; gap: 0.5rem; }
+  .nav-button { padding: 6px 12px; font-size: 12px; }
+  .nav-counter { min-width: 90px; font-size: 11px; padding: 5px 8px; }
+  .page-content { padding: 8px 0 16px; }
+  .start-button, .stop-button, .load-db-button { padding: 4px 10px; font-size: 12px; }
+  .header-buttons { gap: 0.3rem; }
+  .settings-modal { width: 95%; max-height: 90vh; }
+  .setting-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  .setting-item input[type="number"] { width: 100%; }
+  .setting-item.radio-group { flex-direction: column; gap: 0.5rem; }
+  .settings-footer { flex-direction: column; }
+  .settings-cancel, .settings-save { width: 100%; }
 }
