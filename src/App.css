@@ -1,9 +1,5 @@
 /*App.css - the menu-item button reset applied.*/
-/* App.css */
-/* App.css - FIXED: Android media queries now respect --card-width */
-/* App.css */
-
-/* App.css - FIXED: Android respects --card-width AND --card-height */
+/* App.css - FIXED: Android honors --card-width AND --card-height, and SVG never covers text */
 /* App.css */
 
 body {
@@ -256,7 +252,7 @@ body.light .header-db-info.repeat-error .db-info-repeat     { background: rgba(2
   align-items: center;
   color: #fff;
   box-sizing: border-box;
-  overflow: hidden;              /* ✅ prevents content from stretching the card */
+  overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
 }
@@ -274,6 +270,9 @@ body.light .header-db-info.repeat-error .db-info-repeat     { background: rgba(2
   justify-content: center;
 }
 
+/* ✅ The card is a vertical stack: word / content(svg) / translation.
+   Word and translation are FIXED (flex: 0 0 auto); the middle
+   .card-content shrinks and the SVG inside shrinks FIRST. */
 .card-content {
   flex: 1 1 auto;
   display: flex;
@@ -282,7 +281,7 @@ body.light .header-db-info.repeat-error .db-info-repeat     { background: rgba(2
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 0;                 /* ✅ allow shrink */
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -290,32 +289,37 @@ body.light .header-db-info.repeat-error .db-info-repeat     { background: rgba(2
   font-size: var(--font-size);
   font-weight: 700;
   margin: 0;
-  flex-shrink: 1;                /* ✅ was 0 — allow shrink */
+  flex: 0 0 auto;                 /* ✅ fixed: never shrinks */
   text-align: center;
   width: 100%;
   line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .transcription {
   font-size: 16px;
   color: #fff;
   margin: 0;
-  flex-shrink: 1;                /* ✅ was 0 */
+  flex: 0 0 auto;                 /* ✅ fixed: never shrinks */
   text-align: center;
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* ✅ SVG wrapper is the ONLY flexible element in the card.
+   It gets leftovers; when space runs out it shrinks first
+   (down to 40px) so text is never covered. */
 .svg-wrapper {
-  flex: 1 1 auto;
-  min-height: 0;                 /* ✅ was 60px — this was blocking shrink */
+  flex: 1 1 0;                    /* ✅ only this shrinks */
+  min-height: 40px;
   min-width: 0;
   max-height: 100%;
   max-width: min(260px, 100%);
-  width: auto;
+  width: 100%;
   height: auto;
   display: flex;
   justify-content: center;
@@ -330,7 +334,7 @@ body.light .header-db-info.repeat-error .db-info-repeat     { background: rgba(2
   max-width: 100%;
   max-height: 100%;
   display: block;
-  object-fit: contain;
+  object-fit: contain;            /* ✅ scale to fit, never overflow */
 }
 
 .svg-wrapper.svg-bordered {
@@ -346,11 +350,12 @@ body.light .svg-wrapper.svg-bordered { border-color: #0078d4; }
   font-size: 18px;
   color: #fff;
   margin: 0;
-  flex-shrink: 1;                /* ✅ was 0 */
+  flex: 0 0 auto;                 /* ✅ fixed: never shrinks */
   text-align: center;
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== MENU DROPDOWN ===== */
@@ -608,7 +613,7 @@ body.light .active-pulse { box-shadow: 0 0 20px rgba(76, 175, 80, 0.6); border: 
     box-sizing: border-box;
   }
 
-  /* ✅ FIX: honor BOTH width and height variables, cap only for overflow */
+  /* ✅ Honor BOTH variables exactly — content shrinks, not the card */
   .card {
     width: min(var(--card-width), 100%);
     height: var(--card-height);
@@ -652,7 +657,7 @@ body.light .active-pulse { box-shadow: 0 0 20px rgba(76, 175, 80, 0.6); border: 
 
 /* Phone / very narrow */
 @media (max-width: 600px) {
-  /* ✅ FIX: same — respect both variables */
+  /* ✅ Same — respect both variables */
   .card {
     width: min(var(--card-width), 100%);
     height: var(--card-height);
