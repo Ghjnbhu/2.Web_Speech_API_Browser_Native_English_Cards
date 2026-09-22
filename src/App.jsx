@@ -149,7 +149,6 @@ const App = () => {
   const shuffledRecordsForSpeechRef = useRef([]);
   const settingsForSpeechRef = useRef(settings);
 
-  // ✅ NEW: always-current voices ref
   const availableVoicesRef = useRef(availableVoices);
 
   const studyStartIndexRef = useRef(0);
@@ -176,6 +175,7 @@ const App = () => {
 
   const speakTextRef = useRef(null);
   const startRepeatListeningRef = useRef(null);
+  const pronounceAndMaybeListenRef = useRef(null);
 
   const {
     transcript,
@@ -193,9 +193,13 @@ const App = () => {
     shuffledRecordsForSpeechRef.current = shuffledRecordsRef.current;
   });
   useEffect(() => { settingsForSpeechRef.current = settings; }, [settings]);
-
-  // ✅ NEW: keep voices ref in sync
   useEffect(() => { availableVoicesRef.current = availableVoices; }, [availableVoices]);
+
+  // Theme driven by body class
+  useEffect(() => {
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(settings.theme);
+  }, [settings.theme]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -345,9 +349,6 @@ const App = () => {
     };
   }, []);
 
-  // =============================================================
-  // getCurrentVoice — reads from availableVoicesRef (never stale)
-  // =============================================================
   const getCurrentVoice = (voiceName = null) => {
     if (!isSpeechSupported()) return null;
     const targetVoiceName = voiceName || userSelectedVoiceNameRef.current || settings.selectedVoiceName;
@@ -359,27 +360,14 @@ const App = () => {
       return cachedVoiceRef.current;
     }
 
-    // Exact match
     let voice = voices.find(v => v.name === targetVoiceName);
 
-    // Loose match — normalizes dash/space/case
     if (!voice) {
       const target = normalizeVoiceName(targetVoiceName);
       voice = voices.find(v => normalizeVoiceName(v.name) === target);
-      if (voice) {
-        console.warn('[getCurrentVoice] loose match used for:', targetVoiceName);
-      }
     }
 
     if (voice) cachedVoiceRef.current = voice;
-
-    if (!voice) {
-      console.warn('[getCurrentVoice] MISS', {
-        targetVoiceName,
-        totalVoices: voices.length,
-      });
-    }
-
     return voice || null;
   };
 
@@ -503,10 +491,7 @@ const App = () => {
 
   const startRepeatListening = useCallback((expectedWord) => {
     if (typeof SpeechRecognitionLib?.startListening !== 'function') {
-      console.error(
-        '[Repeat] SpeechRecognitionLib.startListening is not available. ' +
-        'Check for a name collision with window.SpeechRecognition, or a broken library import.'
-      );
+      console.error('[Repeat] SpeechRecognitionLib.startListening is not available.');
       setRepeatStatus('error');
       return;
     }
@@ -575,12 +560,54 @@ const App = () => {
     return record.plural?.translation || '';
   };
 
-  // =============================================================
-  // pronounceAndMaybeListen — reads from state, not refs
-  //   • repeat-after-me: word only
-  //   • auto-pronounce: word → translation (with voice fallback)
-  // =============================================================
-  const pronounceAndMaybeListen = useCallback((cardType, index, record) => {
+  const moveToNextCardInStudy = () => {
+    if (!isStudyingRef.current) return;
+
+    const records = isRandomSessionRef.current ? shuffledRecordsRef.current : allRecordsRef.current;
+    const currentIdx = isRandomSessionRef.current ? studyIndexRef.current : currentIndexRef.current;
+    const currentActive = activeCardRef.current;
+
+    setCardPulsing(currentActive, false);
+
+    if (currentActive === 'singular') {
+      setActiveCard('plural');
+      const record = records[currentIdx];
+      setTimeout(() => {
+        if (!isStudyingRef.current) return;
+        setCardPulsing('plural', true);
+        setTimeout(() => {
+          if (!isStudyingRef.current) return;
+          pronounceAndMaybeListenRef.current?.('plural', currentIdx, record);
+        }, 200);
+      }, 100);
+    } else {
+      if (currentIdx < records.length - 1) {
+        const nextIdx = currentIdx + 1;
+        if (isRandomSessionRef.current) {
+          studyIndexRef.current = nextIdx;
+          setCurrentRecord(records[nextIdx]);
+        } else {
+          setCurrentIndex(nextIdx);
+          setCurrentRecord(records[nextIdx]);
+        }
+        setActiveCard('singular');
+        const record = records[nextIdx];
+        setTimeout(() => {
+          if (!isStudyingRef.current) return;
+          setCardPulsing('singular', true);
+          setTimeout(() => {
+            if (!isStudyingRef.current) return;
+            pronounceAndMaybeListenRef.current?.('singular', nextIdx, record);
+          }, 200);
+        }, 100);
+      } else {
+        setCardPulsing('plural', false);
+        resetStudyState(true);
+      }
+    }
+  };
+
+  const pronounceAndMaybeListen = (cardType, index, record) => {
     if (!settings.autoPronounce) return;
     if (!isStudyingRef.current) return;
 
@@ -605,7 +632,6 @@ const App = () => {
     const selectedVoiceName = settings.selectedVoiceName;
     const totalRepeats = Math.max(1, settings.repeatTimes || 1);
 
-    // Fallback: if no translation voice set, use the primary selected voice
     const effectiveTranslationVoiceName =
       (rawTranslationVoiceName && rawTranslationVoiceName.trim() !== '')
         ? rawTranslationVoiceName
@@ -613,13 +639,11 @@ const App = () => {
 
     totalRepeatsRef.current = totalRepeats;
 
-    // ── Repeat-after-me: word only ──────────────────────────────
     if (repeatAfterMe) {
       speakOneAndListen(word, 0, totalRepeats);
       return;
     }
 
-    // ── Auto-pronounce: word → translation ──────────────────────
     const translation = getTranslationForRecord(record, cardType);
     const hasTranslation = translation && translation.trim() !== '';
 
@@ -640,7 +664,6 @@ const App = () => {
               translationRepeatTimes
             );
           } else {
-            console.warn('[PM] translation voice unresolved, advancing without translation');
             setTimeout(() => moveToNextCardInStudy(), 300);
           }
         }, 400);
@@ -651,54 +674,11 @@ const App = () => {
         setTimeout(() => moveToNextCardInStudy(), 300);
       });
     }
-  }, [speakOneAndListen, settings, availableVoices]);
-
-  const moveToNextCardInStudy = () => {
-    if (!isStudyingRef.current) return;
-
-    const records = isRandomSessionRef.current ? shuffledRecordsRef.current : allRecordsRef.current;
-    const currentIdx = isRandomSessionRef.current ? studyIndexRef.current : currentIndexRef.current;
-    const currentActive = activeCardRef.current;
-
-    setCardPulsing(currentActive, false);
-
-    if (currentActive === 'singular') {
-      setActiveCard('plural');
-      const record = records[currentIdx];
-      setTimeout(() => {
-        if (!isStudyingRef.current) return;
-        setCardPulsing('plural', true);
-        setTimeout(() => {
-          if (!isStudyingRef.current) return;
-          pronounceAndMaybeListen('plural', currentIdx, record);
-        }, 200);
-      }, 100);
-    } else {
-      if (currentIdx < records.length - 1) {
-        const nextIdx = currentIdx + 1;
-        if (isRandomSessionRef.current) {
-          studyIndexRef.current = nextIdx;
-          setCurrentRecord(records[nextIdx]);
-        } else {
-          setCurrentIndex(nextIdx);
-          setCurrentRecord(records[nextIdx]);
-        }
-        setActiveCard('singular');
-        const record = records[nextIdx];
-        setTimeout(() => {
-          if (!isStudyingRef.current) return;
-          setCardPulsing('singular', true);
-          setTimeout(() => {
-            if (!isStudyingRef.current) return;
-            pronounceAndMaybeListen('singular', nextIdx, record);
-          }, 200);
-        }, 100);
-      } else {
-        setCardPulsing('plural', false);
-        resetStudyState(true);
-      }
-    }
   };
+
+  useEffect(() => {
+    pronounceAndMaybeListenRef.current = pronounceAndMaybeListen;
+  });
 
   const resetStudyState = (showCompletionAlert = false) => {
     if (isCompletingRef.current) return;
@@ -795,6 +775,11 @@ const App = () => {
       firstRecord = records[currentIndex];
     }
 
+    // ✅ Clear pulses on BOTH cards before starting the session
+    setCardPulsing('singular', false);
+    setCardPulsing('plural', false);
+    clearManualPulse();
+
     setIsStudying(true);
     isStudyingRef.current = true;
     setActiveCard('singular');
@@ -857,7 +842,7 @@ const App = () => {
     } else {
       setTimeout(() => {
         if (!isStudyingRef.current) return;
-        pronounceAndMaybeListen('singular', firstIndex, firstRecord);
+        pronounceAndMaybeListenRef.current?.('singular', firstIndex, firstRecord);
       }, 500);
     }
   };
@@ -961,67 +946,7 @@ const App = () => {
   const closeSettings = () => setIsSettingsOpen(false);
 
   const toggleTheme = () => {
-    const newTheme = settings.theme === 'dark' ? 'light' : 'dark';
-    handleSettingChange('theme', newTheme);
-    applyThemeToDOM(newTheme);
-  };
-
-  const applyThemeToDOM = (theme) => {
-    document.body.classList.remove('light', 'dark');
-    document.body.classList.add(theme);
-
-    if (theme === 'light') {
-      document.body.style.background = '#f5f5f5';
-      document.querySelectorAll('.card').forEach(card => {
-        card.style.background = '#ffffff';
-        card.style.color = '#333';
-        card.style.border = '1px solid #e0e0e0';
-        card.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
-      });
-      document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
-        el.style.color = '#333';
-      });
-    } else {
-      document.body.style.background = '#000';
-      document.querySelectorAll('.card').forEach(card => {
-        card.style.background = '#4f4949';
-        card.style.color = '#fff';
-        card.style.border = 'none';
-        card.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)';
-      });
-      document.querySelectorAll('.english-word, .transcription, .translation').forEach(el => {
-        el.style.color = '#fff';
-      });
-    }
-  };
-
-  const applyVisualSettings = () => {
-    const cards = document.querySelectorAll('.cards-row .card');
-    cards.forEach(card => {
-      card.style.width = `${settings.cardWidth}px`;
-      card.style.height = `${settings.cardHeight}px`;
-    });
-    const cardsRow = document.querySelector('.cards-row');
-    if (cardsRow) cardsRow.style.gap = `${settings.cardGap}px`;
-    const englishWords = document.querySelectorAll('.english-word');
-    englishWords.forEach(word => word.style.fontSize = `${settings.fontSize}px`);
-
-    const transcriptions = document.querySelectorAll('.transcription');
-    transcriptions.forEach(trans => trans.style.display = settings.showTranscription ? 'block' : 'none');
-
-    const translations = document.querySelectorAll('.translation');
-    translations.forEach(trans => trans.style.display = settings.showTranslation ? 'block' : 'none');
-
-    const svgWrappers = document.querySelectorAll('.svg-wrapper');
-    svgWrappers.forEach(wrapper => {
-      if (settings.showSvgBorder) {
-        wrapper.classList.add('svg-bordered');
-      } else {
-        wrapper.classList.remove('svg-bordered');
-      }
-    });
-
-    applyThemeToDOM(settings.theme);
+    handleSettingChange('theme', settings.theme === 'dark' ? 'light' : 'dark');
   };
 
   const handleOpenSettingsFile = () => {
@@ -1031,10 +956,10 @@ const App = () => {
   };
 
   const SETTINGS_SCHEMA = {
-    cardWidth: { type: 'number', min: 200, max: 800, default: 400 },
-    cardHeight: { type: 'number', min: 200, max: 800, default: 400 },
-    cardGap: { type: 'number', min: 5, max: 100, default: 50 },
-    fontSize: { type: 'number', min: 8, max: 48, default: 32 },
+    cardWidth: { type: 'number', min: 250, max: 600, default: 400 },
+    cardHeight: { type: 'number', min: 250, max: 600, default: 400 },
+    cardGap: { type: 'number', min: 20, max: 100, default: 50 },
+    fontSize: { type: 'number', min: 20, max: 48, default: 32 },
     showSvgBorder: { type: 'boolean', default: false },
     showTranscription: { type: 'boolean', default: true },
     showTranslation: { type: 'boolean', default: true },
@@ -1115,11 +1040,8 @@ const App = () => {
 
         setSettings(newSettings);
 
-        setTimeout(() => {
-          applyVisualSettings();
-          userSelectedVoiceNameRef.current = newSettings.selectedVoiceName || "";
-          cachedVoiceRef.current = null;
-        }, 0);
+        userSelectedVoiceNameRef.current = newSettings.selectedVoiceName || "";
+        cachedVoiceRef.current = null;
 
         if (rejected.length > 0) {
           alert(
@@ -1138,7 +1060,6 @@ const App = () => {
   };
 
   const applyAndClose = () => {
-    applyVisualSettings();
     if (isStudying) {
       stopStudyTimer();
       setTimeout(() => startStudyTimer(), 100);
@@ -1147,7 +1068,6 @@ const App = () => {
   };
 
   const saveSettings = async () => {
-    applyVisualSettings();
     if (isStudying) {
       stopStudyTimer();
       setTimeout(() => startStudyTimer(), 100);
@@ -1555,10 +1475,26 @@ const App = () => {
     return 'Start study session';
   };
 
+  const appClassName = [
+    'app',
+    !settings.showTranscription ? 'hide-transcription' : '',
+    !settings.showTranslation ? 'hide-translation' : '',
+  ].filter(Boolean).join(' ');
+
+  const appStyle = {
+    '--card-width': `${settings.cardWidth}px`,
+    '--card-height': `${settings.cardHeight}px`,
+    '--card-gap': `${settings.cardGap}px`,
+    '--font-size': `${settings.fontSize}px`,
+  };
+
+  const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
+
   return (
-    <div className="app">
+    <div className={appClassName} style={appStyle}>
       <div className="top-bar-wrapper">
         <div className="top-bar" role="banner">
+          {/* ✅ Header-left now contains the pill, right after Menu */}
           <div className="header-left">
             <button
               onClick={toggleTheme}
@@ -1569,7 +1505,9 @@ const App = () => {
             >
               <span aria-hidden="true">{settings.theme === 'dark' ? '☀️' : '🌙'}</span>
             </button>
+
             <div className="header-title">Eco Cards</div>
+
             {!isStudying && (
               <button
                 className="menu-button"
@@ -1581,89 +1519,90 @@ const App = () => {
                 Menu
               </button>
             )}
+
+            {/* ✅ Live status pill — placed right after Menu */}
+            {dbLoaded && currentRecord && (
+              <div
+                className={`header-db-info ${settings.repeatAfterMe && isStudying ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span className="db-info-label" aria-hidden="true">📁</span>
+                <span className="db-info-name">{dbFileName}</span>
+                <span className="db-info-separator" aria-hidden="true">|</span>
+                <span className="db-info-id">ID: {currentRecord.id}</span>
+
+                {isSpeaking && (
+                  <>
+                    <span className="db-info-separator" aria-hidden="true">|</span>
+                    <span
+                      className="db-info-timer"
+                      role="status"
+                      aria-live="polite"
+                      aria-label="Currently speaking"
+                      title="Speaking"
+                    >
+                      <span aria-hidden="true">🔊</span>
+                    </span>
+                  </>
+                )}
+
+                {isListeningForRepeat && !(settings.repeatAfterMe && isStudying) && (
+                  <>
+                    <span className="db-info-separator" aria-hidden="true">|</span>
+                    <span
+                      className="db-info-timer"
+                      role="status"
+                      aria-live="polite"
+                      aria-label="Listening for your voice"
+                      title="Listening"
+                    >
+                      <span aria-hidden="true">🎤</span>
+                    </span>
+                  </>
+                )}
+
+                {settings.repeatAfterMe && isStudying && (
+                  <>
+                    <span className="db-info-separator" aria-hidden="true">|</span>
+                    <span className="db-info-repeat" aria-live="polite">
+                      {repeatStatus === 'listening' && (
+                        <>
+                          <span aria-hidden="true">🎤</span>
+                          <span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span>
+                        </>
+                      )}
+                      {repeatStatus === 'matched' && (
+                        <>
+                          <span aria-hidden="true">✅</span>
+                          <span>Matched ({repeatProgress.current}/{repeatProgress.total})</span>
+                        </>
+                      )}
+                      {repeatStatus === 'retry' && (
+                        <>
+                          <span aria-hidden="true">🔁</span>
+                          <span>Retry ({repeatProgress.current}/{repeatProgress.total})</span>
+                        </>
+                      )}
+                      {repeatStatus === 'error' && (
+                        <>
+                          <span aria-hidden="true">⚠️</span>
+                          <span>Speech error</span>
+                        </>
+                      )}
+                      {!repeatStatus && (
+                        <>
+                          <span aria-hidden="true">🎧</span>
+                          <span>Repeat mode</span>
+                        </>
+                      )}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-
-          {dbLoaded && currentRecord && (
-            <div
-              className={`header-db-info ${settings.repeatAfterMe && isStudying ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              <span className="db-info-label" aria-hidden="true">📁</span>
-              <span className="db-info-name">{dbFileName}</span>
-              <span className="db-info-separator" aria-hidden="true">|</span>
-              <span className="db-info-id">ID: {currentRecord.id}</span>
-
-              {isSpeaking && (
-                <>
-                  <span className="db-info-separator" aria-hidden="true">|</span>
-                  <span
-                    className="db-info-timer"
-                    role="status"
-                    aria-live="polite"
-                    aria-label="Currently speaking"
-                    title="Speaking"
-                  >
-                    <span aria-hidden="true">🔊</span>
-                  </span>
-                </>
-              )}
-
-              {isListeningForRepeat && !(settings.repeatAfterMe && isStudying) && (
-                <>
-                  <span className="db-info-separator" aria-hidden="true">|</span>
-                  <span
-                    className="db-info-timer"
-                    role="status"
-                    aria-live="polite"
-                    aria-label="Listening for your voice"
-                    title="Listening"
-                  >
-                    <span aria-hidden="true">🎤</span>
-                  </span>
-                </>
-              )}
-
-              {settings.repeatAfterMe && isStudying && (
-                <>
-                  <span className="db-info-separator" aria-hidden="true">|</span>
-                  <span className="db-info-repeat" aria-live="polite">
-                    {repeatStatus === 'listening' && (
-                      <>
-                        <span aria-hidden="true">🎤</span>
-                        <span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span>
-                      </>
-                    )}
-                    {repeatStatus === 'matched' && (
-                      <>
-                        <span aria-hidden="true">✅</span>
-                        <span>Matched ({repeatProgress.current}/{repeatProgress.total})</span>
-                      </>
-                    )}
-                    {repeatStatus === 'retry' && (
-                      <>
-                        <span aria-hidden="true">🔁</span>
-                        <span>Retry ({repeatProgress.current}/{repeatProgress.total})</span>
-                      </>
-                    )}
-                    {repeatStatus === 'error' && (
-                      <>
-                        <span aria-hidden="true">⚠️</span>
-                        <span>Speech error</span>
-                      </>
-                    )}
-                    {!repeatStatus && (
-                      <>
-                        <span aria-hidden="true">🎧</span>
-                        <span>Repeat mode</span>
-                      </>
-                    )}
-                  </span>
-                </>
-              )}
-            </div>
-          )}
 
           <div className="header-buttons">
             {dbLoaded && allRecords.length > 0 && (
@@ -1746,7 +1685,7 @@ const App = () => {
               <div className="transcription">
                 {dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}
               </div>
-              <div className="svg-wrapper" ref={singularSvgRef} aria-hidden="true"></div>
+              <div className={svgWrapperClass} ref={singularSvgRef} aria-hidden="true"></div>
             </div>
             <div className="translation">
               {dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}
@@ -1774,7 +1713,7 @@ const App = () => {
               <div className="transcription">
                 {dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}
               </div>
-              <div className="svg-wrapper" ref={pluralSvgRef} aria-hidden="true"></div>
+              <div className={svgWrapperClass} ref={pluralSvgRef} aria-hidden="true"></div>
             </div>
             <div className="translation">
               {dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}

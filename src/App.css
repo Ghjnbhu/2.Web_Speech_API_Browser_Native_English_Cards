@@ -1,11 +1,32 @@
 /*App.css - the menu-item button reset applied.*/
-
 /* App.css */
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #000;
 }
+
+body.dark {
+  background: #000;
+}
+
+body.light {
+  background: #f5f5f5;
+  color: #333;
+}
+
+/* ===== CSS VARIABLES (driven by React inline styles on .app) ===== */
+.app {
+  --card-width: 400px;
+  --card-height: 400px;
+  --card-gap: 50px;
+  --font-size: 32px;
+}
+
+/* Visibility utility classes */
+.hide-transcription .transcription { display: none; }
+.hide-translation .translation     { display: none; }
 
 /* ===== HEADER ===== */
 .top-bar-wrapper {
@@ -33,6 +54,9 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;      /* ✅ keep pill on the same row as Menu button */
 }
 
 .menu-button {
@@ -44,6 +68,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   transition: background 0.3s ease;
+  flex-shrink: 0;
 }
 
 .menu-button:hover {
@@ -53,6 +78,7 @@ body {
 .header-title {
   font-size: 18px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .header-db-info {
@@ -65,35 +91,50 @@ body {
   font-size: 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.3);
   transition: background 0.3s ease, border-color 0.3s ease;
+  flex-shrink: 1;         /* ✅ allow shrink */
+  min-width: 0;           /* ✅ required for ellipsis in flex */
+  overflow: hidden;       /* ✅ clip overflow */
 }
 
 .db-info-label {
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .db-info-name {
   font-weight: 600;
   font-family: monospace;
+  max-width: 120px;       /* ✅ cap filename width */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .db-info-separator {
   margin: 0 0.25rem;
   opacity: 0.7;
+  flex-shrink: 0;
 }
 
 .db-info-id {
   font-family: monospace;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .db-info-active {
   font-family: monospace;
   color: #4caf50;
+  flex-shrink: 0;
 }
 
 .db-info-timer {
   font-family: monospace;
   font-weight: bold;
   color: #ff9800;
+  flex-shrink: 0;
 }
 
 /* ===== INLINE REPEAT STATUS (inside header DB info) ===== */
@@ -111,6 +152,9 @@ body {
   padding: 2px 8px;
   border-radius: 12px;
   transition: background 0.3s ease, color 0.3s ease;
+  flex-shrink: 1;         /* ✅ allow chip to shrink */
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Idle (waiting to speak) */
@@ -171,20 +215,11 @@ body.light .header-db-info.repeat-error .db-info-repeat {
   color: #b71c1c;
 }
 
-/* Mobile: hide the textual part of the repeat status to save space */
-@media (max-width: 600px) {
-  .db-info-repeat span:not([aria-hidden="true"]) {
-    display: none;
-  }
-  .db-info-repeat {
-    padding: 2px 6px;
-  }
-}
-
 .header-buttons {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 /* ===== START BUTTON ===== */
@@ -314,8 +349,8 @@ body.light .header-db-info.repeat-error .db-info-repeat {
 
 /* ===== CARDS ===== */
 .card {
-  width: 400px;
-  height: 400px;
+  width: var(--card-width);
+  height: var(--card-height);
   background: #4f4949;
   border-radius: 12px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
@@ -339,7 +374,7 @@ body.light .header-db-info.repeat-error .db-info-repeat {
   margin: 0 auto;
   display: flex;
   flex-wrap: nowrap;
-  gap: 50px;
+  gap: var(--card-gap);
   justify-content: center;
 }
 
@@ -355,7 +390,7 @@ body.light .header-db-info.repeat-error .db-info-repeat {
 }
 
 .english-word {
-  font-size: 32px;
+  font-size: var(--font-size);
   font-weight: 700;
   margin: 0;
   flex-shrink: 0;
@@ -708,11 +743,6 @@ button.settings-ok:hover {
 }
 
 /* ===== DAY MODE ===== */
-body.light {
-  background: #f5f5f5;
-  color: #333;
-}
-
 body.light .top-bar {
   background: #ffffff;
   color: #333;
@@ -857,27 +887,74 @@ body.light .active-pulse {
 }
 
 /* ===== RESPONSIVE ===== */
+
+/* Tablet and narrow desktop */
 @media (max-width: 960px) {
   .top-bar-wrapper { width: 90%; }
   .cards-row { width: 90%; flex-wrap: wrap; }
   .card { width: 100%; max-width: 450px; }
-  .top-bar { flex-wrap: wrap; height: auto; gap: 0.5rem; }
-  .header-left { flex: 1; }
-  .header-db-info { order: 2; }
-  .header-buttons { order: 3; width: 100%; justify-content: flex-end; }
+
+  /* ✅ Android fix: keep header-left items on one row */
+  .top-bar {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 0.5rem;
+    justify-content: flex-start;
+  }
+
+  .header-left {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  .header-db-info {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 60%;
+    overflow: hidden;
+  }
+
+  .db-info-name {
+    max-width: 80px;
+  }
+
+  .header-buttons {
+    order: 3;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .page-content { padding: 10px 0 16px; }
   .nav-counter { min-width: 100px; font-size: 12px; padding: 6px 12px; }
 }
 
+/* Phone / very narrow */
 @media (max-width: 600px) {
   .card { width: 100%; }
-  .header-db-info { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+
+  .header-db-info {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    max-width: 65%;
+  }
+
   .db-info-name {
-    max-width: 100px;
+    max-width: 60px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  /* ✅ Hide repeat-status text, keep only the icon on phones */
+  .db-info-repeat span:not([aria-hidden="true"]) {
+    display: none;
+  }
+  .db-info-repeat {
+    padding: 2px 6px;
+  }
+
   .navigation-buttons { margin: 0 0 0.75rem 0; gap: 0.5rem; }
   .nav-button { padding: 6px 12px; font-size: 12px; }
   .nav-counter { min-width: 90px; font-size: 11px; padding: 5px 8px; }
