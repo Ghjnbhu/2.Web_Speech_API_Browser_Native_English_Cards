@@ -16,8 +16,10 @@
 // App.jsx - FIXED: #1 StrictMode + #17 ARIA + #18 SVG classes + #20 SVG XSS + #21 Settings + #22 Repeat-after-me
 
 // App.jsx - FIXED: repeat-after-me status moved into header DB pill (no layout shift)
+
+// App.jsx - FIXED: renamed import to avoid collision with window.SpeechRecognition
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
 import './App.css';
 
 // =============================================================
@@ -204,8 +206,8 @@ const App = () => {
     setRepeatStatus('');
     setRepeatProgress({ current: 0, total: 0 });
     currentRepeatIndexRef.current = 0;
-    try { SpeechRecognition.stopListening(); } catch (err) { }
-    try { SpeechRecognition.abortListening(); } catch (err) { }
+    try { SpeechRecognitionLib.stopListening(); } catch (err) { /* ignore */ }
+    try { SpeechRecognitionLib.abortListening(); } catch (err) { /* ignore */ }
     resetTranscript();
   }, [resetTranscript]);
 
@@ -454,10 +456,21 @@ const App = () => {
   });
 
   const startRepeatListening = useCallback((expectedWord) => {
+    // ✅ Defensive guard — clear error if the library isn't loaded / name collision occurred
+    if (typeof SpeechRecognitionLib?.startListening !== 'function') {
+      console.error(
+        '[Repeat] SpeechRecognitionLib.startListening is not available. ' +
+        'Check for a name collision with window.SpeechRecognition, or a broken library import.'
+      );
+      setRepeatStatus('error');
+      return;
+    }
+
     if (!browserSupportsSpeechRecognition) {
       setRepeatStatus('error');
       return;
     }
+
     expectedWordRef.current = expectedWord;
     expectingUserSpeechRef.current = true;
     setIsListeningForRepeat(true);
@@ -468,7 +481,7 @@ const App = () => {
     });
     resetTranscript();
     try {
-      SpeechRecognition.startListening({
+      SpeechRecognitionLib.startListening({
         continuous: false,
         interimResults: true,
         language: 'en-US',
@@ -773,7 +786,7 @@ const App = () => {
       if (isSpeechSupported() && synthRef.current) {
         try { synthRef.current.cancel(); } catch (err) { }
       }
-      try { SpeechRecognition.abortListening(); } catch (err) { }
+      try { SpeechRecognitionLib.abortListening(); } catch (err) { }
     };
   }, []);
 
@@ -791,7 +804,7 @@ const App = () => {
       if (ratio >= 0.7) {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
-        try { SpeechRecognition.stopListening(); } catch (err) { }
+        try { SpeechRecognitionLib.stopListening(); } catch (err) { }
         resetTranscript();
 
         const isLastAttempt = attemptIndex + 1 >= totalAttempts;
@@ -814,7 +827,7 @@ const App = () => {
       } else {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
-        try { SpeechRecognition.stopListening(); } catch (err) { }
+        try { SpeechRecognitionLib.stopListening(); } catch (err) { }
         resetTranscript();
         setRepeatStatus('retry');
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
@@ -1503,7 +1516,7 @@ const App = () => {
                   </span>
                 </>
               )}
-              {/* Standalone listening indicator — hidden when repeat-status already shows it */}
+
               {isListeningForRepeat && !(settings.repeatAfterMe && isStudying) && (
                 <>
                   <span className="db-info-separator" aria-hidden="true">|</span>
