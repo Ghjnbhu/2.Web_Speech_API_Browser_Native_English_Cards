@@ -956,10 +956,10 @@ const App = () => {
   };
 
   const SETTINGS_SCHEMA = {
-    cardWidth: { type: 'number', min: 250, max: 600, default: 400 },
-    cardHeight: { type: 'number', min: 250, max: 600, default: 400 },
-    cardGap: { type: 'number', min: 20, max: 100, default: 50 },
-    fontSize: { type: 'number', min: 20, max: 48, default: 32 },
+    cardWidth: { type: 'number', min: 150, max: 800, default: 400 },
+    cardHeight: { type: 'number', min: 150, max: 800, default: 400 },
+    cardGap: { type: 'number', min: 5, max: 100, default: 50 },
+    fontSize: { type: 'number', min: 8, max: 48, default: 32 },
     showSvgBorder: { type: 'boolean', default: false },
     showTranscription: { type: 'boolean', default: true },
     showTranslation: { type: 'boolean', default: true },
