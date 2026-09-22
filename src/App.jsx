@@ -1,4 +1,6 @@
-// App.jsx - FIXED: hide arrows + Load DB during study, keep layout stable
+// App.jsx - FIXED: React 19 StrictMode guard for voice loading
+// App.jsx - SVG XSS via innerHTML and show fixed code
+
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
@@ -76,6 +78,10 @@ const App = () => {
 
   const speechGenerationRef = useRef(0);
 
+  // ✅ FIX #1: Guards for StrictMode double-invoked effects
+  const voicesInitializedRef = useRef(false);
+  const mountedRef = useRef(true);
+
   useEffect(() => {
     currentRecordRef.current = currentRecord;
   }, [currentRecord]);
@@ -140,6 +146,9 @@ const App = () => {
     setIsLoadingVoices(true);
 
     const loadWebVoices = () => {
+      // ✅ FIX #1: Bail if unmounted
+      if (!mountedRef.current) return true;
+
       const voices = synthRef.current ? synthRef.current.getVoices() : [];
       if (voices && voices.length > 0) {
         setAvailableVoices(voices);
@@ -166,6 +175,9 @@ const App = () => {
     if (loadWebVoices()) return;
 
     const handleVoicesChanged = () => {
+      // ✅ FIX #1: Bail if unmounted
+      if (!mountedRef.current) return;
+
       const voices = synthRef.current ? synthRef.current.getVoices() : [];
       if (voices && voices.length > 0) {
         setAvailableVoices(voices);
@@ -209,9 +221,14 @@ const App = () => {
 
     let attempts = 0;
     const retryLoad = () => {
+      // ✅ FIX #1: Bail if unmounted
+      if (!mountedRef.current) return;
+
       if (attempts < 10) {
         attempts++;
         setTimeout(() => {
+          if (!mountedRef.current) return;
+
           if (!voicesLoaded && loadWebVoices()) {
             if (synthRef.current && synthRef.current.onvoiceschanged) {
               synthRef.current.onvoiceschanged = null;
@@ -230,13 +247,22 @@ const App = () => {
     retryLoad();
   };
 
+  // ✅ FIX #1: Mark mounted / unmounted + guard against StrictMode double-invoke
   useEffect(() => {
+    mountedRef.current = true;
+
     if (!isSpeechSupported()) {
       setVoiceSupport(false);
-      return;
+      return () => { mountedRef.current = false; };
     }
-    loadVoices();
+
+    if (!voicesInitializedRef.current) {
+      voicesInitializedRef.current = true;
+      loadVoices();
+    }
+
     return () => {
+      mountedRef.current = false;
       if (synthRef.current && synthRef.current.onvoiceschanged) {
         synthRef.current.onvoiceschanged = null;
       }
@@ -886,43 +912,127 @@ const App = () => {
     }
   };
 
+  // =============================================================
+  // ✅ FIX #20: Sanitize SVG before injecting into the DOM
+  // =============================================================
+
+  const DANGEROUS_SVG_TAGS = [
+    'script',
+    'foreignObject',
+    'iframe',
+    'object',
+    'embed',
+    'audio',
+    'video',
+    'source',
+    'track',
+    'image',
+    'use',
+    'animate',
+    'set',
+    'handler',
+    'listener'
+  ];
+
+  const DANGEROUS_ATTR_PREFIXES = ['on'];
+  const DANGEROUS_ATTR_NAMES = ['href', 'xlink:href', 'src', 'data', 'formaction', 'action'];
+
+  const sanitizeSvgString = (rawSvg) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawSvg, 'image/svg+xml');
+
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      console.warn('[SVG sanitize] Parse error:', parseError.textContent);
+      return null;
+    }
+
+    const svgEl = doc.documentElement;
+    if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') {
+      console.warn('[SVG sanitize] Root element is not <svg>');
+      return null;
+    }
+
+    DANGEROUS_SVG_TAGS.forEach((tag) => {
+      doc.querySelectorAll(tag).forEach((el) => el.remove());
+    });
+
+    const allEls = [svgEl, ...doc.querySelectorAll('*')];
+    allEls.forEach((el) => {
+      const attrsToRemove = [];
+
+      Array.from(el.attributes).forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = (attr.value || '').trim();
+
+        if (DANGEROUS_ATTR_PREFIXES.some((p) => name.startsWith(p))) {
+          attrsToRemove.push(attr.name);
+          return;
+        }
+
+        if (DANGEROUS_ATTR_NAMES.includes(name)) {
+          if (/^\s*(javascript|data|vbscript):/i.test(value)) {
+            attrsToRemove.push(attr.name);
+          }
+          return;
+        }
+
+        if (name === 'style' && /url\s*\(\s*['"]?\s*javascript:/i.test(value)) {
+          attrsToRemove.push(attr.name);
+        }
+      });
+
+      attrsToRemove.forEach((a) => el.removeAttribute(a));
+    });
+
+    return svgEl;
+  };
+
   const renderSvgToContainer = (container, svgCode, uniqueId) => {
     if (!container) return;
-    if (!svgCode || svgCode.trim() === '') {
-      container.innerHTML = '';
-      return;
-    }
+
+    // Clear existing content safely (no innerHTML)
+    container.replaceChildren();
+
+    if (!svgCode || svgCode.trim() === '') return;
+
     try {
-      if (svgCode.includes('<svg')) {
-        const scopeId = uniqueId || `svg-${Date.now()}-${Math.random()}`;
-        container.innerHTML = svgCode;
-        const svgElement = container.querySelector('svg');
-        if (svgElement) {
-          svgElement.setAttribute('width', '100%');
-          svgElement.setAttribute('height', '100%');
-          const styleElements = svgElement.querySelectorAll('style');
-          styleElements.forEach(style => {
-            let styleContent = style.innerHTML;
-            styleContent = styleContent.replace(/\.st(\d+)/g, `.${scopeId}-st$1`);
-            style.innerHTML = styleContent;
-          });
-          const allElements = svgElement.querySelectorAll('[class]');
-          allElements.forEach(el => {
-            const oldClass = el.getAttribute('class');
-            if (oldClass && oldClass.match(/st\d+/)) {
-              const newClass = oldClass.replace(/st(\d+)/g, `${scopeId}-st$1`);
-              el.setAttribute('class', newClass);
-            }
-          });
-        }
-      } else {
-        container.innerHTML = '';
+      // ✅ FIX #20: sanitize before rendering
+      const sanitizedSvg = sanitizeSvgString(svgCode);
+      if (!sanitizedSvg) {
+        console.warn('[SVG] Rejected by sanitizer, nothing rendered');
+        return;
       }
+
+      sanitizedSvg.setAttribute('width', '100%');
+      sanitizedSvg.setAttribute('height', '100%');
+
+      const scopeId = uniqueId || `svg-${Date.now()}-${Math.random()}`;
+
+      sanitizedSvg.querySelectorAll('style').forEach((style) => {
+        let styleContent = style.textContent || '';
+        styleContent = styleContent.replace(/\.st(\d+)/g, `.${scopeId}-st$1`);
+        style.textContent = styleContent;
+      });
+
+      sanitizedSvg.querySelectorAll('[class]').forEach((el) => {
+        const oldClass = el.getAttribute('class');
+        if (oldClass && /st\d+/.test(oldClass)) {
+          const newClass = oldClass.replace(/st(\d+)/g, `${scopeId}-st$1`);
+          el.setAttribute('class', newClass);
+        }
+      });
+
+      container.appendChild(sanitizedSvg);
     } catch (error) {
       console.error('Error rendering SVG:', error);
-      container.innerHTML = '';
+      container.replaceChildren();
     }
   };
+
+  // =============================================================
+  // End FIX #20
+  // =============================================================
 
   const loadDatabaseFromFile = async () => {
     if (isStudying) stopStudyTimer();
@@ -1048,8 +1158,8 @@ const App = () => {
         renderSvgToContainer(pluralSvgRef.current, currentRecord.plural?.svgCode, 'plural');
       }, 50);
     } else if (!dbLoaded) {
-      if (singularSvgRef.current) singularSvgRef.current.innerHTML = '';
-      if (pluralSvgRef.current) pluralSvgRef.current.innerHTML = '';
+      if (singularSvgRef.current) singularSvgRef.current.replaceChildren();
+      if (pluralSvgRef.current) pluralSvgRef.current.replaceChildren();
     }
   }, [currentRecord, dbLoaded]);
 
@@ -1124,7 +1234,6 @@ const App = () => {
             </div>
           )}
 
-          {/* ✅ FIXED: arrows + Load DB hidden during study (keep layout), Stop takes Start's slot */}
           <div className="header-buttons">
             {dbLoaded && allRecords.length > 0 && (
               <>
