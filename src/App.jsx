@@ -18,6 +18,12 @@
 // App.jsx - FIXED: repeat-after-me status moved into header DB pill (no layout shift)
 
 // App.jsx - FIXED: renamed import to avoid collision with window.SpeechRecognition
+// App.jsx - FIXED: auto-pronounce now speaks translation; repeat-after-me stays word-only
+// import React, { useState, useEffect, useRef, useCallback } from 'react';
+// import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
+// import './App.css';
+
+// App.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
 import './App.css';
@@ -63,6 +69,14 @@ const similarityRatio = (a, b) => {
   return 1 - dist / maxLen;
 };
 
+const normalizeVoiceName = (name) =>
+  (name || '')
+    .toLowerCase()
+    .replace(/[\u00A0\u2000-\u200B]/g, ' ')
+    .replace(/[–—−]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 // =============================================================
 // Component
 // =============================================================
@@ -85,7 +99,6 @@ const App = () => {
   const [voicesLoaded, setVoicesLoaded] = useState(false);
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
 
-  // Repeat-after-me state
   const [isListeningForRepeat, setIsListeningForRepeat] = useState(false);
   const [repeatStatus, setRepeatStatus] = useState('');
   const [repeatProgress, setRepeatProgress] = useState({ current: 0, total: 0 });
@@ -136,6 +149,9 @@ const App = () => {
   const shuffledRecordsForSpeechRef = useRef([]);
   const settingsForSpeechRef = useRef(settings);
 
+  // ✅ NEW: always-current voices ref
+  const availableVoicesRef = useRef(availableVoices);
+
   const studyStartIndexRef = useRef(0);
   const studyStartRecordRef = useRef(null);
   const shuffledRecordsRef = useRef([]);
@@ -177,6 +193,10 @@ const App = () => {
     shuffledRecordsForSpeechRef.current = shuffledRecordsRef.current;
   });
   useEffect(() => { settingsForSpeechRef.current = settings; }, [settings]);
+
+  // ✅ NEW: keep voices ref in sync
+  useEffect(() => { availableVoicesRef.current = availableVoices; }, [availableVoices]);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       synthRef.current = window.speechSynthesis;
@@ -325,15 +345,41 @@ const App = () => {
     };
   }, []);
 
+  // =============================================================
+  // getCurrentVoice — reads from availableVoicesRef (never stale)
+  // =============================================================
   const getCurrentVoice = (voiceName = null) => {
     if (!isSpeechSupported()) return null;
     const targetVoiceName = voiceName || userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     if (!targetVoiceName) return null;
+
+    const voices = availableVoicesRef.current;
+
     if (cachedVoiceRef.current && cachedVoiceRef.current.name === targetVoiceName) {
       return cachedVoiceRef.current;
     }
-    const voice = availableVoices.find(voice => voice.name === targetVoiceName);
+
+    // Exact match
+    let voice = voices.find(v => v.name === targetVoiceName);
+
+    // Loose match — normalizes dash/space/case
+    if (!voice) {
+      const target = normalizeVoiceName(targetVoiceName);
+      voice = voices.find(v => normalizeVoiceName(v.name) === target);
+      if (voice) {
+        console.warn('[getCurrentVoice] loose match used for:', targetVoiceName);
+      }
+    }
+
     if (voice) cachedVoiceRef.current = voice;
+
+    if (!voice) {
+      console.warn('[getCurrentVoice] MISS', {
+        targetVoiceName,
+        totalVoices: voices.length,
+      });
+    }
+
     return voice || null;
   };
 
@@ -456,7 +502,6 @@ const App = () => {
   });
 
   const startRepeatListening = useCallback((expectedWord) => {
-    // ✅ Defensive guard — clear error if the library isn't loaded / name collision occurred
     if (typeof SpeechRecognitionLib?.startListening !== 'function') {
       console.error(
         '[Repeat] SpeechRecognitionLib.startListening is not available. ' +
@@ -524,8 +569,19 @@ const App = () => {
     return record.plural?.word || '';
   };
 
+  const getTranslationForRecord = (record, cardType) => {
+    if (!record) return '';
+    if (cardType === 'singular') return record.singular?.translation || '';
+    return record.plural?.translation || '';
+  };
+
+  // =============================================================
+  // pronounceAndMaybeListen — reads from state, not refs
+  //   • repeat-after-me: word only
+  //   • auto-pronounce: word → translation (with voice fallback)
+  // =============================================================
   const pronounceAndMaybeListen = useCallback((cardType, index, record) => {
-    if (!settingsForSpeechRef.current.autoPronounce) return;
+    if (!settings.autoPronounce) return;
     if (!isStudyingRef.current) return;
 
     const word = getWordForRecord(record, cardType);
@@ -542,19 +598,60 @@ const App = () => {
     currentCardIndexRef.current = index;
     currentWordRef.current = word;
 
-    const repeatAfterMe = settingsForSpeechRef.current.repeatAfterMe;
-    const totalRepeats = Math.max(1, settingsForSpeechRef.current.repeatTimes || 1);
+    const repeatAfterMe = settings.repeatAfterMe;
+    const pronounceTranslation = settings.pronounceTranslation;
+    const translationRepeatTimes = Math.max(1, settings.translationRepeatTimes || 1);
+    const rawTranslationVoiceName = settings.translationVoiceName;
+    const selectedVoiceName = settings.selectedVoiceName;
+    const totalRepeats = Math.max(1, settings.repeatTimes || 1);
+
+    // Fallback: if no translation voice set, use the primary selected voice
+    const effectiveTranslationVoiceName =
+      (rawTranslationVoiceName && rawTranslationVoiceName.trim() !== '')
+        ? rawTranslationVoiceName
+        : (selectedVoiceName || null);
+
     totalRepeatsRef.current = totalRepeats;
 
+    // ── Repeat-after-me: word only ──────────────────────────────
     if (repeatAfterMe) {
       speakOneAndListen(word, 0, totalRepeats);
+      return;
+    }
+
+    // ── Auto-pronounce: word → translation ──────────────────────
+    const translation = getTranslationForRecord(record, cardType);
+    const hasTranslation = translation && translation.trim() !== '';
+
+    if (pronounceTranslation && hasTranslation) {
+      speakTextRef.current(word, () => {
+        if (!isStudyingRef.current) return;
+        setTimeout(() => {
+          if (!isStudyingRef.current) return;
+          const translationVoice = getCurrentVoice(effectiveTranslationVoiceName);
+          if (translationVoice) {
+            speakTextRef.current(
+              translation,
+              () => {
+                if (!isStudyingRef.current) return;
+                setTimeout(() => moveToNextCardInStudy(), 300);
+              },
+              effectiveTranslationVoiceName,
+              translationRepeatTimes
+            );
+          } else {
+            console.warn('[PM] translation voice unresolved, advancing without translation');
+            setTimeout(() => moveToNextCardInStudy(), 300);
+          }
+        }, 400);
+      });
     } else {
       speakTextRef.current(word, () => {
         if (!isStudyingRef.current) return;
         setTimeout(() => moveToNextCardInStudy(), 300);
       });
     }
-  }, [speakOneAndListen]);
+  }, [speakOneAndListen, settings, availableVoices]);
 
   const moveToNextCardInStudy = () => {
     if (!isStudyingRef.current) return;
@@ -670,10 +767,6 @@ const App = () => {
     studyStartIndexRef.current = currentIndex;
     studyStartRecordRef.current = currentRecord;
 
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
     cancelAllSpeech();
     stopRepeatListening();
     setTimeRemaining(0);
@@ -1105,7 +1198,7 @@ const App = () => {
     setSettings(prev => ({ ...prev, selectedVoiceName: voiceName }));
 
     if (voiceName) {
-      const voice = availableVoices.find(v => v.name === voiceName);
+      const voice = availableVoicesRef.current.find(v => v.name === voiceName);
       if (voice) {
         cachedVoiceRef.current = voice;
         const testText = "Hello! Voice selected successfully.";
@@ -1158,7 +1251,7 @@ const App = () => {
         startStudyTimer();
         let modeMsg = '';
         if (settings.repeatAfterMe) {
-          modeMsg = `🎤 Repeat-after-me mode:\n• Word is pronounced ${settings.repeatTimes} time(s)\n• After EACH pronunciation the mic listens\n• If each attempt matches, the study advances\n• If not, the same attempt repeats\n• (Translation pronunciation is disabled in this mode)${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
+          modeMsg = `🎤 Repeat-after-me mode:\n• Word is pronounced ${settings.repeatTimes} time(s)\n• After EACH pronunciation the mic listens\n• If each attempt matches, the study advances\n• If not, the same attempt repeats\n• (Translation pronunciation is not used in this mode)${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
         } else if (settings.autoPronounce && settings.selectedVoiceName) {
           modeMsg = `🔊 Auto-pronunciation mode: Each card will be pronounced and auto-advance\n${settings.pronounceTranslation ? '🌐 Translation will also be pronounced\n' : ''}⏱️ No timer - progress after pronunciation completes${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
         } else {
@@ -1784,7 +1877,7 @@ const App = () => {
                 {settings.repeatAfterMe && browserSupportsSpeechRecognition && (
                   <div className="setting-item">
                     <small style={{ color: '#4caf50', fontSize: '0.75rem' }}>
-                      ✓ The word is pronounced {settings.repeatTimes} time(s). After each pronunciation the mic listens once. Each attempt must match before moving on. Translation pronunciation is disabled.
+                      ✓ The word is pronounced {settings.repeatTimes} time(s). After each pronunciation the mic listens once. Each attempt must match before moving on. Translation pronunciation is not used in this mode.
                     </small>
                   </div>
                 )}
@@ -1829,7 +1922,7 @@ const App = () => {
                       disabled={settings.repeatAfterMe} />
                     Pronounce translation
                     {settings.repeatAfterMe && (
-                      <small style={{ color: '#ff9800', marginLeft: '0.4rem' }}>(disabled in repeat-after-me mode)</small>
+                      <small style={{ color: '#ff9800', marginLeft: '0.4rem' }}>(not used in repeat-after-me mode)</small>
                     )}
                   </label>
                 </div>
@@ -1837,8 +1930,8 @@ const App = () => {
                   <label htmlFor="setting-translationVoice">Translation Voice:</label>
                   <select id="setting-translationVoice" value={settings.translationVoiceName || ""}
                     onChange={(e) => handleSettingChange('translationVoiceName', e.target.value)}
-                    disabled={!voicesLoaded || !settings.pronounceTranslation || settings.repeatAfterMe}
-                    style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '220px', cursor: (voicesLoaded && settings.pronounceTranslation && !settings.repeatAfterMe) ? 'pointer' : 'not-allowed', opacity: (voicesLoaded && settings.pronounceTranslation && !settings.repeatAfterMe) ? 1 : 0.6 }}>
+                    disabled={!voicesLoaded || !settings.pronounceTranslation}
+                    style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '220px', cursor: (voicesLoaded && settings.pronounceTranslation) ? 'pointer' : 'not-allowed', opacity: (voicesLoaded && settings.pronounceTranslation) ? 1 : 0.6 }}>
                     <option value="">-- Select a voice --</option>
                     {availableVoices.map((voice) => (<option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>))}
                   </select>
@@ -1848,8 +1941,8 @@ const App = () => {
                   <input id="setting-translationRepeatTimes" type="number" value={settings.translationRepeatTimes}
                     onChange={(e) => handleSettingChange('translationRepeatTimes', parseInt(e.target.value) || 1)}
                     min="1" max="5" step="1"
-                    disabled={!settings.pronounceTranslation || settings.repeatAfterMe}
-                    style={{ background: (settings.pronounceTranslation && !settings.repeatAfterMe) ? '#3c3c3c' : '#2a2a2a', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '80px', cursor: (settings.pronounceTranslation && !settings.repeatAfterMe) ? 'pointer' : 'not-allowed', opacity: (settings.pronounceTranslation && !settings.repeatAfterMe) ? 1 : 0.6 }} />
+                    disabled={!settings.pronounceTranslation}
+                    style={{ background: settings.pronounceTranslation ? '#3c3c3c' : '#2a2a2a', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '80px', cursor: settings.pronounceTranslation ? 'pointer' : 'not-allowed', opacity: settings.pronounceTranslation ? 1 : 0.6 }} />
                   <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
                 </div>
                 <div className="setting-item">
