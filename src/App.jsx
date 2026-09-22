@@ -970,7 +970,7 @@ const App = () => {
     autoPronounce: { type: 'boolean', default: true },
     pronounceTranslation: { type: 'boolean', default: true },
     translationVoiceName: { type: 'string', maxLength: 200, default: '' },
-    translationRepeatTimes: { type: 'number', min: 1, max: 5, default: 1 },
+    translationRepeatTimes: { type: 'number', min: 1, max: 5, default: 3 },
     randomOrder: { type: 'boolean', default: true },
     repeatAfterMe: { type: 'boolean', default: false },
   };
