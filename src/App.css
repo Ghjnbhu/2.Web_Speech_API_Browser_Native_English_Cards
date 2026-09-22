@@ -1,5 +1,7 @@
 /*App.css - the menu-item button reset applied.*/
 /* App.css */
+/* App.css - FIXED: Android media queries now respect --card-width */
+/* App.css */
 
 body {
   margin: 0;
@@ -56,7 +58,7 @@ body.light {
   gap: 1rem;
   flex: 1;
   min-width: 0;
-  flex-wrap: nowrap;      /* ✅ keep pill on the same row as Menu button */
+  flex-wrap: nowrap;
 }
 
 .menu-button {
@@ -91,9 +93,9 @@ body.light {
   font-size: 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.3);
   transition: background 0.3s ease, border-color 0.3s ease;
-  flex-shrink: 1;         /* ✅ allow shrink */
-  min-width: 0;           /* ✅ required for ellipsis in flex */
-  overflow: hidden;       /* ✅ clip overflow */
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .db-info-label {
@@ -104,7 +106,7 @@ body.light {
 .db-info-name {
   font-weight: 600;
   font-family: monospace;
-  max-width: 120px;       /* ✅ cap filename width */
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -152,7 +154,7 @@ body.light {
   padding: 2px 8px;
   border-radius: 12px;
   transition: background 0.3s ease, color 0.3s ease;
-  flex-shrink: 1;         /* ✅ allow chip to shrink */
+  flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
 }
@@ -891,10 +893,26 @@ body.light .active-pulse {
 /* Tablet and narrow desktop */
 @media (max-width: 960px) {
   .top-bar-wrapper { width: 90%; }
-  .cards-row { width: 90%; flex-wrap: wrap; }
-  .card { width: 100%; max-width: 450px; }
 
-  /* ✅ Android fix: keep header-left items on one row */
+  /* ✅ FIX: respect user's --card-width, but never overflow the row */
+  .cards-row {
+    width: 100%;
+    flex-wrap: wrap;
+    max-width: 916px;
+    padding-left: 12px;
+    padding-right: 12px;
+    box-sizing: border-box;
+  }
+
+  .card {
+    /* ✅ FIX: use user's width, cap at 100% of container */
+    width: min(var(--card-width), 100%);
+    max-width: none;
+    height: auto;
+    min-height: var(--card-height);
+  }
+
+  /* ✅ FIX: keep header-left items on one row */
   .top-bar {
     flex-wrap: wrap;
     height: auto;
@@ -932,7 +950,12 @@ body.light .active-pulse {
 
 /* Phone / very narrow */
 @media (max-width: 600px) {
-  .card { width: 100%; }
+  /* ✅ FIX: respect user's --card-width, cap at 100% of container */
+  .card {
+    width: min(var(--card-width), 100%);
+    height: auto;
+    min-height: var(--card-height);
+  }
 
   .header-db-info {
     font-size: 0.7rem;
