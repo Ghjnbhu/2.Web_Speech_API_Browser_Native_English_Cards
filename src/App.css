@@ -1,3 +1,5 @@
+/*App.css - the menu-item button reset applied.*/
+
 /* App.css */
 body {
   margin: 0;
@@ -62,6 +64,7 @@ body {
   border-radius: 20px;
   font-size: 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .db-info-label {
@@ -91,6 +94,91 @@ body {
   font-family: monospace;
   font-weight: bold;
   color: #ff9800;
+}
+
+/* ===== INLINE REPEAT STATUS (inside header DB info) ===== */
+.header-db-info.repeat-mode {
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.db-info-repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 12px;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Idle (waiting to speak) */
+.header-db-info.repeat-idle .db-info-repeat {
+  background: rgba(76, 175, 80, 0.25);
+  color: #a5d6a7;
+}
+
+/* Listening */
+.header-db-info.repeat-listening .db-info-repeat {
+  background: rgba(33, 150, 243, 0.3);
+  color: #90caf9;
+  animation: repeatPulseInline 1.2s ease-in-out infinite;
+}
+
+/* Matched */
+.header-db-info.repeat-matched .db-info-repeat {
+  background: rgba(76, 175, 80, 0.4);
+  color: #c8e6c9;
+}
+
+/* Retry */
+.header-db-info.repeat-retry .db-info-repeat {
+  background: rgba(255, 152, 0, 0.3);
+  color: #ffcc80;
+}
+
+/* Error */
+.header-db-info.repeat-error .db-info-repeat {
+  background: rgba(244, 67, 54, 0.3);
+  color: #ef9a9a;
+}
+
+@keyframes repeatPulseInline {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.5); }
+  50%      { box-shadow: 0 0 0 6px rgba(33, 150, 243, 0); }
+}
+
+/* Day mode tweaks */
+body.light .header-db-info.repeat-idle .db-info-repeat {
+  background: rgba(76, 175, 80, 0.15);
+  color: #1b5e20;
+}
+body.light .header-db-info.repeat-listening .db-info-repeat {
+  background: rgba(33, 150, 243, 0.15);
+  color: #0d47a1;
+}
+body.light .header-db-info.repeat-matched .db-info-repeat {
+  background: rgba(76, 175, 80, 0.25);
+  color: #1b5e20;
+}
+body.light .header-db-info.repeat-retry .db-info-repeat {
+  background: rgba(255, 152, 0, 0.2);
+  color: #e65100;
+}
+body.light .header-db-info.repeat-error .db-info-repeat {
+  background: rgba(244, 67, 54, 0.2);
+  color: #b71c1c;
+}
+
+/* Mobile: hide the textual part of the repeat status to save space */
+@media (max-width: 600px) {
+  .db-info-repeat span:not([aria-hidden="true"]) {
+    display: none;
+  }
+  .db-info-repeat {
+    padding: 2px 6px;
+  }
 }
 
 .header-buttons {
@@ -173,7 +261,6 @@ body {
   cursor: not-allowed;
 }
 
-/* ✅ GENERAL: hidden but preserves layout slot — used by arrows and Load DB */
 .hidden-but-reserved {
   visibility: hidden !important;
   pointer-events: none !important;
@@ -329,6 +416,7 @@ body.light .svg-wrapper.svg-bordered {
   width: 100%;
 }
 
+/* ===== MENU DROPDOWN ===== */
 .menu-dropdown {
   position: fixed;
   top: 70px;
@@ -342,20 +430,34 @@ body.light .svg-wrapper.svg-bordered {
 }
 
 .menu-item {
+  display: block;
+  width: 100%;
   padding: 12px 20px;
   color: #fff;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  text-align: left;
   cursor: pointer;
   transition: background 0.2s ease;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .menu-item:hover {
   background: #0078d4;
 }
 
-.space-after-title {
-  margin-top: 20px;
+.menu-item:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: -2px;
 }
 
+/* ===== PULSE ANIMATION ===== */
 .active-pulse {
   animation: continuousPulse 1.2s ease-in-out infinite;
   box-shadow: 0 0 20px rgba(76, 175, 80, 0.8);
@@ -378,10 +480,6 @@ body.light .svg-wrapper.svg-bordered {
     border-color: #4caf50;
     transform: scale(1);
   }
-}
-
-.pulse {
-  animation: continuousPulse 0.5s ease-in-out;
 }
 
 /* ===== SETTINGS MODAL ===== */
