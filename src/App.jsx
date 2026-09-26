@@ -4,32 +4,17 @@
 // App.jsx - renderSvgToContainer regex is fragile
 // App.jsx - No role / aria attributes
 // App.jsx - Fix #20 Revision: Allow Internal <use> References
+// App.jsx - FIXED: header button order — Load DB before Start/Stop
+// App.jsx - FIXED: recognized-word chip shows ONLY the recognized word(s)
+// App.jsx - FIXED: strip trailing punctuation from recognized word
+// App.jsx - FIXED: "Repeat after me" label + inline repeat-times input
 
-
-// App.jsx - FIXED: #1 StrictMode + #20 SVG XSS + #21 Settings validation + #18 Robust SVG class rewriting
-// App.jsx - FIXED: #1 StrictMode + #18 SVG class rewriting + #20 SVG XSS + #21 Settings validation + #17 ARIA
-// App.jsx - FIXED: #1 StrictMode + #17 ARIA + #18 SVG class rewriting + #20 (revised) SVG XSS + #21 Settings validation
-
-// App.jsx - FIXED: #1 StrictMode + #17 ARIA + #18 SVG classes + #20 SVG XSS + #21 Settings + #22 Repeat-after-me
-// App.jsx - FIXED: #1 StrictMode + #17 ARIA + #18 SVG classes + #20 SVG XSS + #21 Settings + #22 Repeat-after-me (per-repeat listening)
-
-// App.jsx - FIXED: #1 StrictMode + #17 ARIA + #18 SVG classes + #20 SVG XSS + #21 Settings + #22 Repeat-after-me
-
-// App.jsx - FIXED: repeat-after-me status moved into header DB pill (no layout shift)
-
-// App.jsx - FIXED: renamed import to avoid collision with window.SpeechRecognition
-// App.jsx - FIXED: auto-pronounce now speaks translation; repeat-after-me stays word-only
-// import React, { useState, useEffect, useRef, useCallback } from 'react';
-// import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
-// import './App.css';
-
-// App.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
 import './App.css';
 
 // =============================================================
-// Utility: normalize text for comparison
+// Utilities
 // =============================================================
 const normalizeForComparison = (str) => {
   if (!str) return '';
@@ -77,10 +62,14 @@ const normalizeVoiceName = (name) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const stripTrailingPunctuation = (text) => {
+  if (!text) return '';
+  return String(text).replace(/[.,!?;:]+$/g, '').trim();
+};
+
 // =============================================================
 // Component
 // =============================================================
-
 const App = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [dbLoaded, setDbLoaded] = useState(false);
@@ -102,6 +91,7 @@ const App = () => {
   const [isListeningForRepeat, setIsListeningForRepeat] = useState(false);
   const [repeatStatus, setRepeatStatus] = useState('');
   const [repeatProgress, setRepeatProgress] = useState({ current: 0, total: 0 });
+  const [lastRecognized, setLastRecognized] = useState('');
 
   const [settings, setSettings] = useState({
     cardWidth: 400,
@@ -142,15 +132,7 @@ const App = () => {
   const [manualPulseCard, setManualPulseCard] = useState(null);
 
   const currentRecordRef = useRef(null);
-  const activeCardForSpeechRef = useRef('singular');
-  const currentIndexForSpeechRef = useRef(0);
-  const isRandomSessionForSpeechRef = useRef(false);
-  const studyIndexForSpeechRef = useRef(0);
-  const shuffledRecordsForSpeechRef = useRef([]);
-  const settingsForSpeechRef = useRef(settings);
-
   const availableVoicesRef = useRef(availableVoices);
-
   const studyStartIndexRef = useRef(0);
   const studyStartRecordRef = useRef(null);
   const shuffledRecordsRef = useRef([]);
@@ -159,9 +141,7 @@ const App = () => {
   const settingsFileInputRef = useRef(null);
   const lastSpokenRef = useRef('');
   const cachedVoiceRef = useRef(null);
-
   const speechGenerationRef = useRef(0);
-
   const voicesInitializedRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -185,17 +165,14 @@ const App = () => {
   } = useSpeechRecognition();
 
   useEffect(() => { currentRecordRef.current = currentRecord; }, [currentRecord]);
-  useEffect(() => { activeCardForSpeechRef.current = activeCard; }, [activeCard]);
-  useEffect(() => { currentIndexForSpeechRef.current = currentIndex; }, [currentIndex]);
-  useEffect(() => {
-    isRandomSessionForSpeechRef.current = isRandomSessionRef.current;
-    studyIndexForSpeechRef.current = studyIndexRef.current;
-    shuffledRecordsForSpeechRef.current = shuffledRecordsRef.current;
-  });
-  useEffect(() => { settingsForSpeechRef.current = settings; }, [settings]);
+  useEffect(() => { activeCardRef.current = activeCard; }, [activeCard]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { allRecordsRef.current = allRecords; }, [allRecords]);
+  useEffect(() => { isStudyingRef.current = isStudying; }, [isStudying]);
+  useEffect(() => { timeRemainingRef.current = timeRemaining; }, [timeRemaining]);
   useEffect(() => { availableVoicesRef.current = availableVoices; }, [availableVoices]);
 
-  // Theme driven by body class
   useEffect(() => {
     document.body.classList.remove('light', 'dark');
     document.body.classList.add(settings.theme);
@@ -207,16 +184,8 @@ const App = () => {
     }
   }, []);
 
-  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
-  useEffect(() => { activeCardRef.current = activeCard; }, [activeCard]);
-  useEffect(() => { allRecordsRef.current = allRecords; }, [allRecords]);
-  useEffect(() => { isStudyingRef.current = isStudying; }, [isStudying]);
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
-  useEffect(() => { timeRemainingRef.current = timeRemaining; }, [timeRemaining]);
-
-  const isSpeechSupported = () => {
-    return typeof window !== 'undefined' && window.speechSynthesis !== undefined;
-  };
+  const isSpeechSupported = () =>
+    typeof window !== 'undefined' && window.speechSynthesis !== undefined;
 
   const cancelAllSpeech = () => {
     speechGenerationRef.current++;
@@ -230,16 +199,13 @@ const App = () => {
     setRepeatStatus('');
     setRepeatProgress({ current: 0, total: 0 });
     currentRepeatIndexRef.current = 0;
-    try { SpeechRecognitionLib.stopListening(); } catch (err) { /* ignore */ }
-    try { SpeechRecognitionLib.abortListening(); } catch (err) { /* ignore */ }
+    try { SpeechRecognitionLib.stopListening(); } catch (err) { }
+    try { SpeechRecognitionLib.abortListening(); } catch (err) { }
     resetTranscript();
   }, [resetTranscript]);
 
   const loadVoices = () => {
-    if (!isSpeechSupported()) {
-      setVoiceSupport(false);
-      return;
-    }
+    if (!isSpeechSupported()) { setVoiceSupport(false); return; }
     setIsLoadingVoices(true);
 
     const loadWebVoices = () => {
@@ -251,9 +217,8 @@ const App = () => {
         setVoiceSupport(true);
         setIsLoadingVoices(false);
         if (!settings.selectedVoiceName && voices.length > 0) {
-          const defaultVoice = voices.find(voice =>
-            voice.lang === 'en-US' && voice.name.includes('Google')
-          ) || voices.find(voice => voice.lang === 'en-US') || voices[0];
+          const defaultVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
+            || voices.find(v => v.lang === 'en-US') || voices[0];
           if (defaultVoice) {
             setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
             cachedVoiceRef.current = defaultVoice;
@@ -276,9 +241,8 @@ const App = () => {
         setVoiceSupport(true);
         setIsLoadingVoices(false);
         if (!settings.selectedVoiceName && voices.length > 0) {
-          const defaultVoice = voices.find(voice =>
-            voice.lang === 'en-US' && voice.name.includes('Google')
-          ) || voices.find(voice => voice.lang === 'en-US') || voices[0];
+          const defaultVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
+            || voices.find(v => v.lang === 'en-US') || voices[0];
           if (defaultVoice) {
             setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
             cachedVoiceRef.current = defaultVoice;
@@ -353,20 +317,15 @@ const App = () => {
     if (!isSpeechSupported()) return null;
     const targetVoiceName = voiceName || userSelectedVoiceNameRef.current || settings.selectedVoiceName;
     if (!targetVoiceName) return null;
-
     const voices = availableVoicesRef.current;
-
     if (cachedVoiceRef.current && cachedVoiceRef.current.name === targetVoiceName) {
       return cachedVoiceRef.current;
     }
-
     let voice = voices.find(v => v.name === targetVoiceName);
-
     if (!voice) {
       const target = normalizeVoiceName(targetVoiceName);
       voice = voices.find(v => normalizeVoiceName(v.name) === target);
     }
-
     if (voice) cachedVoiceRef.current = voice;
     return voice || null;
   };
@@ -386,21 +345,10 @@ const App = () => {
     }
   };
 
-  const speakText = (
-    text,
-    onComplete = null,
-    voiceNameOverride = null,
-    repeatCountOverride = null,
-    onEachUtteranceEnd = null,
-  ) => {
-    if (!text) {
-      if (onComplete) onComplete();
-      return;
-    }
-    if (!isSpeechSupported() || !synthRef.current) {
-      if (onComplete) onComplete();
-      return;
-    }
+  const speakText = (text, onComplete = null, voiceNameOverride = null,
+                     repeatCountOverride = null, onEachUtteranceEnd = null) => {
+    if (!text) { if (onComplete) onComplete(); return; }
+    if (!isSpeechSupported() || !synthRef.current) { if (onComplete) onComplete(); return; }
 
     const myGeneration = ++speechGenerationRef.current;
     const isStale = () => myGeneration !== speechGenerationRef.current;
@@ -408,14 +356,10 @@ const App = () => {
     try { synthRef.current.cancel(); } catch (err) { }
 
     const currentVoice = getCurrentVoice(voiceNameOverride);
-    if (!currentVoice) {
-      if (onComplete) onComplete();
-      return;
-    }
+    if (!currentVoice) { if (onComplete) onComplete(); return; }
 
     const repeatCount = repeatCountOverride !== null ? repeatCountOverride : (settings.repeatTimes || 1);
     setIsSpeaking(true);
-
     let currentRepeatIndex = 0;
 
     const speakNext = () => {
@@ -436,19 +380,11 @@ const App = () => {
       utterance.onend = () => {
         if (isStale()) return;
         currentRepeatIndex++;
-
         if (onEachUtteranceEnd) {
           const handled = onEachUtteranceEnd(currentRepeatIndex, repeatCount);
-          if (handled === true) {
-            setIsSpeaking(false);
-            return;
-          }
+          if (handled === true) { setIsSpeaking(false); return; }
         }
-
-        setTimeout(() => {
-          if (isStale()) return;
-          speakNext();
-        }, 800);
+        setTimeout(() => { if (isStale()) return; speakNext(); }, 800);
       };
 
       utterance.onerror = (event) => {
@@ -457,10 +393,7 @@ const App = () => {
           setTimeout(() => {
             if (isStale()) return;
             currentRepeatIndex++;
-            setTimeout(() => {
-              if (isStale()) return;
-              speakNext();
-            }, 500);
+            setTimeout(() => { if (isStale()) return; speakNext(); }, 500);
           }, 200);
         } else if (event.error === 'canceled') {
           // superseded
@@ -470,24 +403,18 @@ const App = () => {
         }
       };
 
-      try {
-        synthRef.current.speak(utterance);
-      } catch (err) {
+      try { synthRef.current.speak(utterance); }
+      catch (err) {
         if (isStale()) return;
         setIsSpeaking(false);
         if (onComplete) onComplete();
       }
     };
 
-    setTimeout(() => {
-      if (isStale()) return;
-      speakNext();
-    }, 100);
+    setTimeout(() => { if (isStale()) return; speakNext(); }, 100);
   };
 
-  useEffect(() => {
-    speakTextRef.current = speakText;
-  });
+  useEffect(() => { speakTextRef.current = speakText; });
 
   const startRepeatListening = useCallback((expectedWord) => {
     if (typeof SpeechRecognitionLib?.startListening !== 'function') {
@@ -495,11 +422,7 @@ const App = () => {
       setRepeatStatus('error');
       return;
     }
-
-    if (!browserSupportsSpeechRecognition) {
-      setRepeatStatus('error');
-      return;
-    }
+    if (!browserSupportsSpeechRecognition) { setRepeatStatus('error'); return; }
 
     expectedWordRef.current = expectedWord;
     expectingUserSpeechRef.current = true;
@@ -509,6 +432,7 @@ const App = () => {
       current: currentRepeatIndexRef.current + 1,
       total: totalRepeatsRef.current,
     });
+    setLastRecognized('');
     resetTranscript();
     try {
       SpeechRecognitionLib.startListening({
@@ -522,51 +446,36 @@ const App = () => {
     }
   }, [browserSupportsSpeechRecognition, resetTranscript]);
 
-  useEffect(() => {
-    startRepeatListeningRef.current = startRepeatListening;
-  });
+  useEffect(() => { startRepeatListeningRef.current = startRepeatListening; });
 
   const speakOneAndListen = useCallback((word, attemptIndex, totalAttempts) => {
     if (!isStudyingRef.current) return;
-
     currentRepeatIndexRef.current = attemptIndex;
     totalRepeatsRef.current = totalAttempts;
-
-    speakTextRef.current(
-      word,
-      null,
-      null,
-      1,
-      () => {
-        if (!isStudyingRef.current) return true;
-        setTimeout(() => {
-          if (!isStudyingRef.current) return;
-          startRepeatListeningRef.current(word);
-        }, 400);
-        return true;
-      }
-    );
+    speakTextRef.current(word, null, null, 1, () => {
+      if (!isStudyingRef.current) return true;
+      setTimeout(() => {
+        if (!isStudyingRef.current) return;
+        startRepeatListeningRef.current(word);
+      }, 400);
+      return true;
+    });
   }, []);
 
   const getWordForRecord = (record, cardType) => {
     if (!record) return '';
-    if (cardType === 'singular') return record.singular?.word || '';
-    return record.plural?.word || '';
+    return cardType === 'singular' ? (record.singular?.word || '') : (record.plural?.word || '');
   };
-
   const getTranslationForRecord = (record, cardType) => {
     if (!record) return '';
-    if (cardType === 'singular') return record.singular?.translation || '';
-    return record.plural?.translation || '';
+    return cardType === 'singular' ? (record.singular?.translation || '') : (record.plural?.translation || '');
   };
 
   const moveToNextCardInStudy = () => {
     if (!isStudyingRef.current) return;
-
     const records = isRandomSessionRef.current ? shuffledRecordsRef.current : allRecordsRef.current;
     const currentIdx = isRandomSessionRef.current ? studyIndexRef.current : currentIndexRef.current;
     const currentActive = activeCardRef.current;
-
     setCardPulsing(currentActive, false);
 
     if (currentActive === 'singular') {
@@ -610,12 +519,8 @@ const App = () => {
   const pronounceAndMaybeListen = (cardType, index, record) => {
     if (!settings.autoPronounce) return;
     if (!isStudyingRef.current) return;
-
     const word = getWordForRecord(record, cardType);
-    if (!word || word.trim() === '') {
-      setTimeout(() => moveToNextCardInStudy(), 300);
-      return;
-    }
+    if (!word || word.trim() === '') { setTimeout(() => moveToNextCardInStudy(), 300); return; }
 
     const key = `${index}_${cardType}`;
     if (lastSpokenRef.current === key) return;
@@ -631,7 +536,6 @@ const App = () => {
     const rawTranslationVoiceName = settings.translationVoiceName;
     const selectedVoiceName = settings.selectedVoiceName;
     const totalRepeats = Math.max(1, settings.repeatTimes || 1);
-
     const effectiveTranslationVoiceName =
       (rawTranslationVoiceName && rawTranslationVoiceName.trim() !== '')
         ? rawTranslationVoiceName
@@ -639,10 +543,7 @@ const App = () => {
 
     totalRepeatsRef.current = totalRepeats;
 
-    if (repeatAfterMe) {
-      speakOneAndListen(word, 0, totalRepeats);
-      return;
-    }
+    if (repeatAfterMe) { speakOneAndListen(word, 0, totalRepeats); return; }
 
     const translation = getTranslationForRecord(record, cardType);
     const hasTranslation = translation && translation.trim() !== '';
@@ -654,15 +555,10 @@ const App = () => {
           if (!isStudyingRef.current) return;
           const translationVoice = getCurrentVoice(effectiveTranslationVoiceName);
           if (translationVoice) {
-            speakTextRef.current(
-              translation,
-              () => {
-                if (!isStudyingRef.current) return;
-                setTimeout(() => moveToNextCardInStudy(), 300);
-              },
-              effectiveTranslationVoiceName,
-              translationRepeatTimes
-            );
+            speakTextRef.current(translation, () => {
+              if (!isStudyingRef.current) return;
+              setTimeout(() => moveToNextCardInStudy(), 300);
+            }, effectiveTranslationVoiceName, translationRepeatTimes);
           } else {
             setTimeout(() => moveToNextCardInStudy(), 300);
           }
@@ -676,9 +572,7 @@ const App = () => {
     }
   };
 
-  useEffect(() => {
-    pronounceAndMaybeListenRef.current = pronounceAndMaybeListen;
-  });
+  useEffect(() => { pronounceAndMaybeListenRef.current = pronounceAndMaybeListen; });
 
   const resetStudyState = (showCompletionAlert = false) => {
     if (isCompletingRef.current) return;
@@ -686,7 +580,6 @@ const App = () => {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-
     cancelAllSpeech();
     stopRepeatListening();
 
@@ -697,6 +590,7 @@ const App = () => {
     currentRepeatIndexRef.current = 0;
     totalRepeatsRef.current = 1;
     currentWordRef.current = '';
+    setLastRecognized('');
 
     if (isRandomSessionRef.current) {
       if (studyStartRecordRef.current) {
@@ -739,10 +633,7 @@ const App = () => {
   };
 
   const startStudyTimer = () => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
+    if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
 
     studyStartIndexRef.current = currentIndex;
     studyStartRecordRef.current = currentRecord;
@@ -753,6 +644,7 @@ const App = () => {
     timeRemainingRef.current = 0;
     lastSpokenRef.current = '';
     currentRepeatIndexRef.current = 0;
+    setLastRecognized('');
 
     completionAlertShownRef.current = false;
     isCompletingRef.current = false;
@@ -770,12 +662,10 @@ const App = () => {
       setCurrentRecord(shuffled[0]);
     } else {
       isRandomSessionRef.current = false;
-      const records = allRecords;
       firstIndex = currentIndex;
-      firstRecord = records[currentIndex];
+      firstRecord = allRecords[currentIndex];
     }
 
-    // ✅ Clear pulses on BOTH cards before starting the session
     setCardPulsing('singular', false);
     setCardPulsing('plural', false);
     clearManualPulse();
@@ -792,20 +682,14 @@ const App = () => {
 
       timerIntervalRef.current = setInterval(() => {
         if (!isStudyingRef.current) {
-          if (timerIntervalRef.current) {
-            clearInterval(timerIntervalRef.current);
-            timerIntervalRef.current = null;
-          }
+          if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
           return;
         }
-
         const currentTime = timeRemainingRef.current;
         if (currentTime <= 1) {
           const records = isRandomSessionRef.current ? shuffledRecordsRef.current : allRecordsRef.current;
           const currentIdx = isRandomSessionRef.current ? studyIndexRef.current : currentIndexRef.current;
-
           setCardPulsing(activeCardRef.current, false);
-
           if (activeCardRef.current === 'singular') {
             setActiveCard('plural');
             setTimeout(() => setCardPulsing('plural', true), 100);
@@ -823,10 +707,7 @@ const App = () => {
               setTimeout(() => setCardPulsing('singular', true), 100);
             } else {
               resetStudyState(true);
-              if (timerIntervalRef.current) {
-                clearInterval(timerIntervalRef.current);
-                timerIntervalRef.current = null;
-              }
+              if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
               return;
             }
           }
@@ -848,10 +729,7 @@ const App = () => {
   };
 
   const stopStudyTimer = () => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
+    if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
     resetStudyState(false);
   };
 
@@ -875,6 +753,9 @@ const App = () => {
     const handle = setTimeout(() => {
       const expected = expectedWordRef.current;
       const spoken = transcript;
+      const cleaned = stripTrailingPunctuation(spoken);
+      setLastRecognized(cleaned);
+
       const ratio = similarityRatio(expected, spoken);
       const attemptIndex = currentRepeatIndexRef.current;
       const totalAttempts = totalRepeatsRef.current;
@@ -884,7 +765,6 @@ const App = () => {
         expectingUserSpeechRef.current = false;
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
         resetTranscript();
-
         const isLastAttempt = attemptIndex + 1 >= totalAttempts;
         setRepeatStatus('matched');
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
@@ -944,16 +824,8 @@ const App = () => {
   const handleMenuClick = () => setIsMenuOpen(!isMenuOpen);
   const openSettings = () => { setIsMenuOpen(false); setIsSettingsOpen(true); };
   const closeSettings = () => setIsSettingsOpen(false);
-
-  const toggleTheme = () => {
-    handleSettingChange('theme', settings.theme === 'dark' ? 'light' : 'dark');
-  };
-
-  const handleOpenSettingsFile = () => {
-    if (settingsFileInputRef.current) {
-      settingsFileInputRef.current.click();
-    }
-  };
+  const toggleTheme = () => handleSettingChange('theme', settings.theme === 'dark' ? 'light' : 'dark');
+  const handleOpenSettingsFile = () => { if (settingsFileInputRef.current) settingsFileInputRef.current.click(); };
 
   const SETTINGS_SCHEMA = {
     cardWidth: { type: 'number', min: 150, max: 800, default: 400 },
@@ -978,17 +850,13 @@ const App = () => {
   const validateSettings = (raw) => {
     const valid = {};
     const rejected = [];
-
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return { valid, rejected: ['(not an object)'] };
     }
-
     Object.keys(raw).forEach((key) => {
       const rule = SETTINGS_SCHEMA[key];
       if (!rule) return;
-
       const value = raw[key];
-
       if (rule.type === 'number') {
         const n = typeof value === 'number' ? value : Number(value);
         if (!Number.isFinite(n)) { rejected.push(`${key} (not a number)`); return; }
@@ -996,33 +864,27 @@ const App = () => {
           rejected.push(`${key} (out of range: ${n}, allowed ${rule.min}–${rule.max})`);
           return;
         }
-        valid[key] = n;
-        return;
+        valid[key] = n; return;
       }
       if (rule.type === 'boolean') {
         if (typeof value !== 'boolean') { rejected.push(`${key} (not a boolean)`); return; }
-        valid[key] = value;
-        return;
+        valid[key] = value; return;
       }
       if (rule.type === 'string') {
         if (typeof value !== 'string') { rejected.push(`${key} (not a string)`); return; }
         if (rule.maxLength && value.length > rule.maxLength) {
-          rejected.push(`${key} (too long: ${value.length} chars)`);
-          return;
+          rejected.push(`${key} (too long: ${value.length} chars)`); return;
         }
-        valid[key] = value;
-        return;
+        valid[key] = value; return;
       }
       if (rule.type === 'enum') {
         if (!rule.values.includes(value)) {
           rejected.push(`${key} (invalid value: "${value}", allowed: ${rule.values.join(', ')})`);
           return;
         }
-        valid[key] = value;
-        return;
+        valid[key] = value; return;
       }
     });
-
     return { valid, rejected };
   };
 
@@ -1033,16 +895,10 @@ const App = () => {
         const parsed = JSON.parse(e.target.result);
         const { valid, rejected } = validateSettings(parsed);
         const newSettings = { ...settings, ...valid };
-
-        if (rejected.length > 0) {
-          console.warn('[Settings] Rejected invalid fields:', rejected);
-        }
-
+        if (rejected.length > 0) console.warn('[Settings] Rejected invalid fields:', rejected);
         setSettings(newSettings);
-
         userSelectedVoiceNameRef.current = newSettings.selectedVoiceName || "";
         cachedVoiceRef.current = null;
-
         if (rejected.length > 0) {
           alert(
             `⚠️ Settings loaded with warnings\n\n` +
@@ -1052,27 +908,18 @@ const App = () => {
         } else {
           alert('✅ Settings loaded successfully!');
         }
-      } catch (err) {
-        alert('❌ Failed to parse settings file.');
-      }
+      } catch (err) { alert('❌ Failed to parse settings file.'); }
     };
     reader.readAsText(file);
   };
 
   const applyAndClose = () => {
-    if (isStudying) {
-      stopStudyTimer();
-      setTimeout(() => startStudyTimer(), 100);
-    }
+    if (isStudying) { stopStudyTimer(); setTimeout(() => startStudyTimer(), 100); }
     closeSettings();
   };
 
   const saveSettings = async () => {
-    if (isStudying) {
-      stopStudyTimer();
-      setTimeout(() => startStudyTimer(), 100);
-    }
-
+    if (isStudying) { stopStudyTimer(); setTimeout(() => startStudyTimer(), 100); }
     const settingsToSave = {
       ...settings,
       dbFileName: dbLoaded ? dbFileName : "",
@@ -1116,7 +963,6 @@ const App = () => {
     cancelAllSpeech();
     userSelectedVoiceNameRef.current = voiceName;
     setSettings(prev => ({ ...prev, selectedVoiceName: voiceName }));
-
     if (voiceName) {
       const voice = availableVoicesRef.current.find(v => v.name === voiceName);
       if (voice) {
@@ -1143,42 +989,39 @@ const App = () => {
       alert('⚠️ Please wait for current pronunciation to finish before starting a study session.');
       return;
     }
+    if (isStudying) { stopStudyTimer(); return; }
 
-    if (isStudying) {
-      stopStudyTimer();
-    } else {
-      if (!dbLoaded || allRecords.length === 0) {
-        alert('⚠️ No database loaded!\n\nPlease load a database file using the "Load DB" button before starting a study session.');
-        return;
+    if (!dbLoaded || allRecords.length === 0) {
+      alert('⚠️ No database loaded!\n\nPlease load a database file using the "Load DB" button before starting a study session.');
+      return;
+    }
+    if (!isSpeechSupported()) {
+      alert('⚠️ Your browser does not support speech synthesis.\n\nPlease use a different browser.');
+      return;
+    }
+    if (settings.autoPronounce && (!voicesLoaded || availableVoices.length === 0)) {
+      alert('⚠️ Voices not loaded yet!\n\nPlease click the "Load Voices" button in Settings first.');
+      return;
+    }
+    if (settings.autoPronounce && !settings.selectedVoiceName) {
+      alert('⚠️ Please select a voice in Settings before starting the study session.');
+      return;
+    }
+    if (settings.repeatAfterMe && !browserSupportsSpeechRecognition) {
+      alert('⚠️ Repeat-after-me requires browser speech recognition, which is not supported in this browser.');
+      return;
+    }
+    if (dbLoaded && allRecords.length > 0) {
+      startStudyTimer();
+      let modeMsg = '';
+      if (settings.repeatAfterMe) {
+        modeMsg = `🎤 Repeat-after-me mode:\n• Word is pronounced ${settings.repeatTimes} time(s)\n• After EACH pronunciation the mic listens\n• If each attempt matches, the study advances\n• If not, the same attempt repeats\n• (Translation pronunciation is not used in this mode)${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
+      } else if (settings.autoPronounce && settings.selectedVoiceName) {
+        modeMsg = `🔊 Auto-pronunciation mode: Each card will be pronounced and auto-advance\n${settings.pronounceTranslation ? '🌐 Translation will also be pronounced\n' : ''}⏱️ No timer - progress after pronunciation completes${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
+      } else {
+        modeMsg = `⏱️ Timer mode: ${settings.studyTime} seconds per card\n🔇 Auto-pronunciation disabled${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
       }
-      if (!isSpeechSupported()) {
-        alert('⚠️ Your browser does not support speech synthesis.\n\nPlease use a different browser.');
-        return;
-      }
-      if (settings.autoPronounce && (!voicesLoaded || availableVoices.length === 0)) {
-        alert('⚠️ Voices not loaded yet!\n\nPlease click the "Load Voices" button in Settings first.');
-        return;
-      }
-      if (settings.autoPronounce && !settings.selectedVoiceName) {
-        alert('⚠️ Please select a voice in Settings before starting the study session.');
-        return;
-      }
-      if (settings.repeatAfterMe && !browserSupportsSpeechRecognition) {
-        alert('⚠️ Repeat-after-me requires browser speech recognition, which is not supported in this browser.');
-        return;
-      }
-      if (dbLoaded && allRecords.length > 0) {
-        startStudyTimer();
-        let modeMsg = '';
-        if (settings.repeatAfterMe) {
-          modeMsg = `🎤 Repeat-after-me mode:\n• Word is pronounced ${settings.repeatTimes} time(s)\n• After EACH pronunciation the mic listens\n• If each attempt matches, the study advances\n• If not, the same attempt repeats\n• (Translation pronunciation is not used in this mode)${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
-        } else if (settings.autoPronounce && settings.selectedVoiceName) {
-          modeMsg = `🔊 Auto-pronunciation mode: Each card will be pronounced and auto-advance\n${settings.pronounceTranslation ? '🌐 Translation will also be pronounced\n' : ''}⏱️ No timer - progress after pronunciation completes${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
-        } else {
-          modeMsg = `⏱️ Timer mode: ${settings.studyTime} seconds per card\n🔇 Auto-pronunciation disabled${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
-        }
-        alert(`📖 Study session started!\n\n${modeMsg}`);
-      }
+      alert(`📖 Study session started!\n\n${modeMsg}`);
     }
   };
 
@@ -1189,41 +1032,28 @@ const App = () => {
   ];
   const DANGEROUS_ATTR_PREFIXES = ['on'];
   const DANGEROUS_ATTR_NAMES = ['src', 'data', 'formaction', 'action'];
-
   const isSafeInternalReference = (value) => /^#[A-Za-z_][\w:.-]*$/.test(value.trim());
 
   const sanitizeSvgString = (rawSvg) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(rawSvg, 'image/svg+xml');
-
-    const parseError = doc.querySelector('parsererror');
-    if (parseError) return null;
-
+    if (doc.querySelector('parsererror')) return null;
     const svgEl = doc.documentElement;
     if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') return null;
 
-    DANGEROUS_SVG_TAGS.forEach((tag) => {
-      doc.querySelectorAll(tag).forEach((el) => el.remove());
-    });
-
+    DANGEROUS_SVG_TAGS.forEach((tag) => doc.querySelectorAll(tag).forEach(el => el.remove()));
     doc.querySelectorAll('use').forEach((useEl) => {
       const href = useEl.getAttribute('href') || useEl.getAttribute('xlink:href') || '';
       if (!isSafeInternalReference(href)) useEl.remove();
     });
 
-    const allEls = [svgEl, ...doc.querySelectorAll('*')];
-    allEls.forEach((el) => {
+    [svgEl, ...doc.querySelectorAll('*')].forEach((el) => {
       const attrsToRemove = [];
       const tagName = el.tagName.toLowerCase();
-
       Array.from(el.attributes).forEach((attr) => {
         const name = attr.name.toLowerCase();
         const value = (attr.value || '').trim();
-
-        if (DANGEROUS_ATTR_PREFIXES.some((p) => name.startsWith(p))) {
-          attrsToRemove.push(attr.name);
-          return;
-        }
+        if (DANGEROUS_ATTR_PREFIXES.some(p => name.startsWith(p))) { attrsToRemove.push(attr.name); return; }
         if (name === 'href' || name === 'xlink:href') {
           if (tagName === 'use') return;
           if (!isSafeInternalReference(value)) attrsToRemove.push(attr.name);
@@ -1233,17 +1063,13 @@ const App = () => {
           if (/^\s*(javascript|data|vbscript):/i.test(value)) attrsToRemove.push(attr.name);
           return;
         }
-        if (name === 'style' && /url\s*\(\s*['"]?\s*javascript:/i.test(value)) {
-          attrsToRemove.push(attr.name);
-        }
+        if (name === 'style' && /url\s*\(\s*['"]?\s*javascript:/i.test(value)) attrsToRemove.push(attr.name);
       });
-
-      attrsToRemove.forEach((a) => el.removeAttribute(a));
+      attrsToRemove.forEach(a => el.removeAttribute(a));
     });
 
     doc.querySelectorAll('style').forEach((styleEl) => {
-      const css = styleEl.textContent || '';
-      styleEl.textContent = css.replace(/@import[^;]+;/gi, '');
+      styleEl.textContent = (styleEl.textContent || '').replace(/@import[^;]+;/gi, '');
     });
 
     return svgEl;
@@ -1253,26 +1079,20 @@ const App = () => {
   const rewriteStyleContent = (cssText, scopeId) =>
     cssText.replace(/\.st(\d+)(?![A-Za-z0-9_-])/g, `.${scopeId}-st$1`);
   const rewriteClassAttribute = (classValue, scopeId) =>
-    classValue
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((token) => (CLASS_TOKEN_REGEX.test(token) ? `${scopeId}-${token}` : token))
+    classValue.split(/\s+/).filter(Boolean)
+      .map(token => (CLASS_TOKEN_REGEX.test(token) ? `${scopeId}-${token}` : token))
       .join(' ');
 
   const renderSvgToContainer = (container, svgCode, uniqueId) => {
     if (!container) return;
     container.replaceChildren();
     if (!svgCode || svgCode.trim() === '') return;
-
     try {
       const sanitizedSvg = sanitizeSvgString(svgCode);
       if (!sanitizedSvg) return;
-
       sanitizedSvg.setAttribute('width', '100%');
       sanitizedSvg.setAttribute('height', '100%');
-
       const scopeId = uniqueId || `svg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
       sanitizedSvg.querySelectorAll('style').forEach((style) => {
         style.textContent = rewriteStyleContent(style.textContent || '', scopeId);
       });
@@ -1280,7 +1100,6 @@ const App = () => {
         const oldClass = el.getAttribute('class');
         if (oldClass) el.setAttribute('class', rewriteClassAttribute(oldClass, scopeId));
       });
-
       container.appendChild(sanitizedSvg);
     } catch (error) {
       console.error('Error rendering SVG:', error);
@@ -1307,13 +1126,11 @@ const App = () => {
         if (importedData.records && Array.isArray(importedData.records)) records = importedData.records;
         else if (Array.isArray(importedData)) records = importedData;
         else throw new Error("Invalid database file format");
-
         if (records.length === 0) throw new Error("Database file contains no records");
 
         const convertedRecords = records.map((record, idx) => {
-          let cardData;
           if (record.card1 && record.card2) {
-            cardData = {
+            return {
               id: record.id || idx + 1,
               singular: {
                 word: record.card1.word || "",
@@ -1328,8 +1145,9 @@ const App = () => {
                 svgCode: record.card2.svgCode || ""
               }
             };
-          } else if (record.singular && record.plural) {
-            cardData = {
+          }
+          if (record.singular && record.plural) {
+            return {
               id: record.id || idx + 1,
               singular: {
                 word: record.singular.word || "",
@@ -1344,24 +1162,22 @@ const App = () => {
                 svgCode: record.plural.svgCode || ""
               }
             };
-          } else {
-            cardData = {
-              id: record.id || idx + 1,
-              singular: {
-                word: record.word || "",
-                transcription: record.transcription || "",
-                translation: record.translation || "",
-                svgCode: record.svgCode || ""
-              },
-              plural: {
-                word: record.word || "",
-                transcription: record.transcription || "",
-                translation: record.translation || "",
-                svgCode: record.svgCode || ""
-              }
-            };
           }
-          return cardData;
+          return {
+            id: record.id || idx + 1,
+            singular: {
+              word: record.word || "",
+              transcription: record.transcription || "",
+              translation: record.translation || "",
+              svgCode: record.svgCode || ""
+            },
+            plural: {
+              word: record.word || "",
+              transcription: record.transcription || "",
+              translation: record.translation || "",
+              svgCode: record.svgCode || ""
+            }
+          };
         });
         setAllRecords(convertedRecords);
         setCurrentIndex(0);
@@ -1384,23 +1200,16 @@ const App = () => {
 
   const nextRecord = () => {
     if (allRecords.length > 0 && currentIndex < allRecords.length - 1 && !isStudying) {
-      cancelAllSpeech();
-      clearManualPulse();
+      cancelAllSpeech(); clearManualPulse();
       const newIndex = currentIndex + 1;
-      setCurrentIndex(newIndex);
-      setCurrentRecord(allRecords[newIndex]);
-      setActiveCard('singular');
+      setCurrentIndex(newIndex); setCurrentRecord(allRecords[newIndex]); setActiveCard('singular');
     }
   };
-
   const prevRecord = () => {
     if (allRecords.length > 0 && currentIndex > 0 && !isStudying) {
-      cancelAllSpeech();
-      clearManualPulse();
+      cancelAllSpeech(); clearManualPulse();
       const newIndex = currentIndex - 1;
-      setCurrentIndex(newIndex);
-      setCurrentRecord(allRecords[newIndex]);
-      setActiveCard('singular');
+      setCurrentIndex(newIndex); setCurrentRecord(allRecords[newIndex]); setActiveCard('singular');
     }
   };
 
@@ -1421,12 +1230,10 @@ const App = () => {
     if (isStudying) return;
     if (!dbLoaded || !currentRecord) return;
     if (!voiceSupport) return;
-
     const currentVoice = getCurrentVoice();
     if (!currentVoice) return;
 
-    let word = '';
-    let translation = '';
+    let word = '', translation = '';
     if (cardType === 'singular') {
       word = currentRecord.singular?.word || '';
       translation = currentRecord.singular?.translation || '';
@@ -1439,7 +1246,6 @@ const App = () => {
     clearManualPulse();
     setCardPulsing(cardType, true);
     setManualPulseCard(cardType);
-
     const finishPronunciation = () => clearManualPulse();
 
     if (settings.pronounceTranslation && translation && translation.trim() !== '') {
@@ -1468,7 +1274,6 @@ const App = () => {
     if (settings.repeatAfterMe) return '🎤 Repeat';
     return '🚀 Start';
   };
-
   const startButtonAriaLabel = () => {
     if (isStudying) return 'Stop study session';
     if (settings.repeatAfterMe) return 'Start repeat-after-me study session';
@@ -1494,7 +1299,6 @@ const App = () => {
     <div className={appClassName} style={appStyle}>
       <div className="top-bar-wrapper">
         <div className="top-bar" role="banner">
-          {/* ✅ Header-left now contains the pill, right after Menu */}
           <div className="header-left">
             <button
               onClick={toggleTheme}
@@ -1520,7 +1324,6 @@ const App = () => {
               </button>
             )}
 
-            {/* ✅ Live status pill — placed right after Menu */}
             {dbLoaded && currentRecord && (
               <div
                 className={`header-db-info ${settings.repeatAfterMe && isStudying ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
@@ -1536,13 +1339,8 @@ const App = () => {
                 {isSpeaking && (
                   <>
                     <span className="db-info-separator" aria-hidden="true">|</span>
-                    <span
-                      className="db-info-timer"
-                      role="status"
-                      aria-live="polite"
-                      aria-label="Currently speaking"
-                      title="Speaking"
-                    >
+                    <span className="db-info-timer" role="status" aria-live="polite"
+                      aria-label="Currently speaking" title="Speaking">
                       <span aria-hidden="true">🔊</span>
                     </span>
                   </>
@@ -1551,13 +1349,8 @@ const App = () => {
                 {isListeningForRepeat && !(settings.repeatAfterMe && isStudying) && (
                   <>
                     <span className="db-info-separator" aria-hidden="true">|</span>
-                    <span
-                      className="db-info-timer"
-                      role="status"
-                      aria-live="polite"
-                      aria-label="Listening for your voice"
-                      title="Listening"
-                    >
+                    <span className="db-info-timer" role="status" aria-live="polite"
+                      aria-label="Listening for your voice" title="Listening">
                       <span aria-hidden="true">🎤</span>
                     </span>
                   </>
@@ -1567,36 +1360,11 @@ const App = () => {
                   <>
                     <span className="db-info-separator" aria-hidden="true">|</span>
                     <span className="db-info-repeat" aria-live="polite">
-                      {repeatStatus === 'listening' && (
-                        <>
-                          <span aria-hidden="true">🎤</span>
-                          <span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span>
-                        </>
-                      )}
-                      {repeatStatus === 'matched' && (
-                        <>
-                          <span aria-hidden="true">✅</span>
-                          <span>Matched ({repeatProgress.current}/{repeatProgress.total})</span>
-                        </>
-                      )}
-                      {repeatStatus === 'retry' && (
-                        <>
-                          <span aria-hidden="true">🔁</span>
-                          <span>Retry ({repeatProgress.current}/{repeatProgress.total})</span>
-                        </>
-                      )}
-                      {repeatStatus === 'error' && (
-                        <>
-                          <span aria-hidden="true">⚠️</span>
-                          <span>Speech error</span>
-                        </>
-                      )}
-                      {!repeatStatus && (
-                        <>
-                          <span aria-hidden="true">🎧</span>
-                          <span>Repeat mode</span>
-                        </>
-                      )}
+                      {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
+                      {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                      {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                      {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
+                      {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat mode</span></>)}
                     </span>
                   </>
                 )}
@@ -1612,8 +1380,7 @@ const App = () => {
                   className={`nav-button ${isStudying ? 'hidden-but-reserved' : ''}`}
                   style={{ background: '#0078d4', padding: '6px 12px' }}
                   disabled={isStudying}
-                  aria-label="Previous card"
-                  title="Previous card"
+                  aria-label="Previous card" title="Previous card"
                 >
                   <span aria-hidden="true">◀</span>
                 </button>
@@ -1622,12 +1389,33 @@ const App = () => {
                   className={`nav-button ${isStudying ? 'hidden-but-reserved' : ''}`}
                   style={{ background: '#0078d4', padding: '6px 12px' }}
                   disabled={isStudying}
-                  aria-label="Next card"
-                  title="Next card"
+                  aria-label="Next card" title="Next card"
                 >
                   <span aria-hidden="true">▶</span>
                 </button>
               </>
+            )}
+
+            <button
+              className={`load-db-button ${isStudying ? 'hidden-but-reserved' : ''}`}
+              onClick={loadDatabaseFromFile}
+              disabled={isLoading || isStudying}
+              aria-busy={isLoading}
+              aria-label={isLoading ? 'Loading database' : 'Load database file'}
+            >
+              {isLoading ? 'Loading...' : (<><span aria-hidden="true">📂 </span>Load DB</>)}
+            </button>
+
+            {settings.repeatAfterMe && isStudying && lastRecognized && (
+              <span
+                className={`recognized-chip recognized-${repeatStatus || 'idle'}`}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                title="Recognized word"
+              >
+                {lastRecognized}
+              </span>
             )}
 
             {dbLoaded && allRecords.length > 0 && (
@@ -1641,23 +1429,6 @@ const App = () => {
                 {startButtonLabel()}
               </button>
             )}
-
-            <button
-              className={`load-db-button ${isStudying ? 'hidden-but-reserved' : ''}`}
-              onClick={loadDatabaseFromFile}
-              disabled={isLoading || isStudying}
-              aria-busy={isLoading}
-              aria-label={isLoading ? 'Loading database' : 'Load database file'}
-            >
-              {isLoading ? (
-                'Loading...'
-              ) : (
-                <>
-                  <span aria-hidden="true">📂 </span>
-                  Load DB
-                </>
-              )}
-            </button>
           </div>
         </div>
       </div>
@@ -1744,25 +1515,25 @@ const App = () => {
                   <label htmlFor="setting-cardWidth">Card Width (px):</label>
                   <input id="setting-cardWidth" type="number" value={settings.cardWidth}
                     onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
-                    min="300" max="600" step="10" />
+                    min="150" max="800" step="10" />
                 </div>
                 <div className="setting-item">
                   <label htmlFor="setting-cardHeight">Card Height (px):</label>
                   <input id="setting-cardHeight" type="number" value={settings.cardHeight}
                     onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
-                    min="300" max="600" step="10" />
+                    min="150" max="800" step="10" />
                 </div>
                 <div className="setting-item">
                   <label htmlFor="setting-cardGap">Gap between cards (px):</label>
                   <input id="setting-cardGap" type="number" value={settings.cardGap}
                     onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 50)}
-                    min="20" max="100" step="5" />
+                    min="5" max="100" step="5" />
                 </div>
                 <div className="setting-item">
                   <label htmlFor="setting-fontSize">Font Size (px):</label>
                   <input id="setting-fontSize" type="number" value={settings.fontSize}
                     onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)}
-                    min="20" max="48" step="2" />
+                    min="8" max="48" step="2" />
                 </div>
                 <div className="setting-item checkbox">
                   <label>
@@ -1803,9 +1574,33 @@ const App = () => {
                       checked={settings.repeatAfterMe}
                       onChange={(e) => handleSettingChange('repeatAfterMe', e.target.checked)}
                     />
-                    🎤 Repeat after me (voice recognition)
+                    🎤 Repeat after me
                   </label>
                 </div>
+
+                {settings.repeatAfterMe && (
+                  <div className="setting-item">
+                    <label htmlFor="setting-repeatAfterMeTimes">Repeat word:</label>
+                    <input
+                      id="setting-repeatAfterMeTimes"
+                      type="number"
+                      value={settings.repeatTimes}
+                      onChange={(e) => handleSettingChange('repeatTimes', parseInt(e.target.value) || 3)}
+                      min="1" max="5" step="1"
+                      style={{
+                        background: '#3c3c3c',
+                        border: '1px solid #555',
+                        color: 'white',
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '6px',
+                        fontSize: '0.9rem',
+                        width: '80px'
+                      }}
+                    />
+                    <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
+                  </div>
+                )}
+
                 {settings.repeatAfterMe && !browserSupportsSpeechRecognition && (
                   <div className="setting-item">
                     <small style={{ color: '#f44336', fontSize: '0.8rem' }}>
@@ -1813,10 +1608,11 @@ const App = () => {
                     </small>
                   </div>
                 )}
+
                 {settings.repeatAfterMe && browserSupportsSpeechRecognition && (
                   <div className="setting-item">
                     <small style={{ color: '#4caf50', fontSize: '0.75rem' }}>
-                      ✓ The word is pronounced {settings.repeatTimes} time(s). After each pronunciation the mic listens once. Each attempt must match before moving on. Translation pronunciation is not used in this mode.
+                      ✓ The word is pronounced {settings.repeatTimes} time(s). After each pronunciation the mic listens once. Each attempt must match before moving on.
                     </small>
                   </div>
                 )}
