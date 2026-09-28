@@ -8,10 +8,22 @@
 // App.jsx - FIXED: recognized-word chip shows ONLY the recognized word(s)
 // App.jsx - FIXED: strip trailing punctuation from recognized word
 // App.jsx - FIXED: "Repeat after me" label + inline repeat-times input
+// App.jsx - NEW: navigation-mode click runs repeat-after-me cycle when enabled
+// App.jsx - NEW: "Load lesson locally" checkbox in Display Options
+// App.jsx - NEW: gear button opens Settings modal directly (no menu dropdown)
+// App.jsx - NEW: Load DB button shows 📁 / 🌐 based on loadLessonLocally
+// App.jsx - NEW: server mode fetches /lessons/index.json and lists lessons
+// App.jsx - NEW: server mode opens a picker modal on Load DB click
+// App.jsx - CLEANUP: manifest URL is a constant; not in settings or UI
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
 import './App.css';
+
+// =============================================================
+// Constants
+// =============================================================
+const LESSONS_INDEX_URL = '/lessons/index.json';
 
 // =============================================================
 // Utilities
@@ -71,7 +83,6 @@ const stripTrailingPunctuation = (text) => {
 // Component
 // =============================================================
 const App = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [dbLoaded, setDbLoaded] = useState(false);
   const [dbFileName, setDbFileName] = useState("");
   const [currentRecord, setCurrentRecord] = useState(null);
@@ -79,6 +90,7 @@ const App = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [allRecords, setAllRecords] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLessonPickerOpen, setIsLessonPickerOpen] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [isStudying, setIsStudying] = useState(false);
   const [activeCard, setActiveCard] = useState('singular');
@@ -93,12 +105,18 @@ const App = () => {
   const [repeatProgress, setRepeatProgress] = useState({ current: 0, total: 0 });
   const [lastRecognized, setLastRecognized] = useState('');
 
+  const [lessonsList, setLessonsList] = useState([]);
+  const [lessonsListError, setLessonsListError] = useState('');
+  const [isLoadingLessonsList, setIsLoadingLessonsList] = useState(false);
+
   const [settings, setSettings] = useState({
     cardWidth: 400,
     cardHeight: 400,
     cardGap: 50,
     showTranscription: true,
     showTranslation: true,
+    loadLessonLocally: false,
+    selectedLessonFile: '',
     fontSize: 32,
     showSvgBorder: false,
     theme: 'dark',
@@ -153,9 +171,13 @@ const App = () => {
   const currentCardTypeRef = useRef('singular');
   const currentCardIndexRef = useRef(0);
 
+  const navRepeatActiveRef = useRef(false);
+  const navRepeatCardTypeRef = useRef('singular');
+
   const speakTextRef = useRef(null);
   const startRepeatListeningRef = useRef(null);
   const pronounceAndMaybeListenRef = useRef(null);
+  const finishNavRepeatRef = useRef(null);
 
   const {
     transcript,
@@ -184,8 +206,43 @@ const App = () => {
     }
   }, []);
 
+  // ✅ Fetch the lessons manifest on mount
+  useEffect(() => {
+    const url = LESSONS_INDEX_URL;
+    let cancelled = false;
+    setIsLoadingLessonsList(true);
+    setLessonsListError('');
+
+    fetch(url, { headers: { Accept: 'application/json' } })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data?.lessons) ? data.lessons : [];
+        setLessonsList(list);
+        if (!settingsRef.current.selectedLessonFile && list.length > 0) {
+          setSettings((prev) => ({ ...prev, selectedLessonFile: list[0].file }));
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLessonsList([]);
+        setLessonsListError(err.message || 'Failed to load lessons list');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingLessonsList(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
   const isSpeechSupported = () =>
     typeof window !== 'undefined' && window.speechSynthesis !== undefined;
+
+  const isRepeatCycleActive = () =>
+    isStudyingRef.current || navRepeatActiveRef.current;
 
   const cancelAllSpeech = () => {
     speechGenerationRef.current++;
@@ -203,6 +260,17 @@ const App = () => {
     try { SpeechRecognitionLib.abortListening(); } catch (err) { }
     resetTranscript();
   }, [resetTranscript]);
+
+  const cancelRepeatCycle = () => {
+    navRepeatActiveRef.current = false;
+    cancelAllSpeech();
+    stopRepeatListening();
+    setLastRecognized('');
+    currentRepeatIndexRef.current = 0;
+    totalRepeatsRef.current = 1;
+    currentWordRef.current = '';
+    lastSpokenRef.current = '';
+  };
 
   const loadVoices = () => {
     if (!isSpeechSupported()) { setVoiceSupport(false); return; }
@@ -449,13 +517,13 @@ const App = () => {
   useEffect(() => { startRepeatListeningRef.current = startRepeatListening; });
 
   const speakOneAndListen = useCallback((word, attemptIndex, totalAttempts) => {
-    if (!isStudyingRef.current) return;
+    if (!isRepeatCycleActive()) return;
     currentRepeatIndexRef.current = attemptIndex;
     totalRepeatsRef.current = totalAttempts;
     speakTextRef.current(word, null, null, 1, () => {
-      if (!isStudyingRef.current) return true;
+      if (!isRepeatCycleActive()) return true;
       setTimeout(() => {
-        if (!isStudyingRef.current) return;
+        if (!isRepeatCycleActive()) return;
         startRepeatListeningRef.current(word);
       }, 400);
       return true;
@@ -574,6 +642,57 @@ const App = () => {
 
   useEffect(() => { pronounceAndMaybeListenRef.current = pronounceAndMaybeListen; });
 
+  const finishNavRepeat = useCallback(() => {
+    navRepeatActiveRef.current = false;
+    cancelAllSpeech();
+    stopRepeatListening();
+    setLastRecognized('');
+    currentRepeatIndexRef.current = 0;
+    totalRepeatsRef.current = 1;
+    currentWordRef.current = '';
+    setCardPulsing(navRepeatCardTypeRef.current, false);
+    setManualPulseCard(null);
+  }, [stopRepeatListening]);
+
+  useEffect(() => { finishNavRepeatRef.current = finishNavRepeat; }, [finishNavRepeat]);
+
+  const startNavRepeatCycle = useCallback((cardType, word) => {
+    if (!browserSupportsSpeechRecognition) {
+      alert('⚠️ Repeat-after-me requires browser speech recognition, which is not supported in this browser.');
+      return;
+    }
+    if (!word || word.trim() === '') return;
+    if (!voicesLoaded || !settings.selectedVoiceName) {
+      alert('⚠️ Please load voices and select a voice in Settings before using repeat-after-me.');
+      return;
+    }
+
+    cancelRepeatCycle();
+
+    navRepeatActiveRef.current = true;
+    navRepeatCardTypeRef.current = cardType;
+
+    currentCardTypeRef.current = cardType;
+    currentWordRef.current = word;
+    lastSpokenRef.current = `${currentIndexRef.current}_${cardType}`;
+
+    const totalAttempts = Math.max(1, settings.repeatTimes || 1);
+    totalRepeatsRef.current = totalAttempts;
+
+    clearManualPulse();
+    setCardPulsing(cardType, true);
+    setManualPulseCard(cardType);
+
+    speakOneAndListen(word, 0, totalAttempts);
+  }, [browserSupportsSpeechRecognition, voicesLoaded, settings.selectedVoiceName,
+      settings.repeatTimes, clearManualPulse]);
+
+  const startNavRepeatCycleRef = useRef(null);
+
+  useEffect(() => {
+    startNavRepeatCycleRef.current = startNavRepeatCycle;
+  }, [startNavRepeatCycle]);
+
   const resetStudyState = (showCompletionAlert = false) => {
     if (isCompletingRef.current) return;
     if (timerIntervalRef.current) {
@@ -582,6 +701,8 @@ const App = () => {
     }
     cancelAllSpeech();
     stopRepeatListening();
+
+    navRepeatActiveRef.current = false;
 
     setIsStudying(false);
     setTimeRemaining(0);
@@ -640,6 +761,7 @@ const App = () => {
 
     cancelAllSpeech();
     stopRepeatListening();
+    navRepeatActiveRef.current = false;
     setTimeRemaining(0);
     timeRemainingRef.current = 0;
     lastSpokenRef.current = '';
@@ -773,12 +895,15 @@ const App = () => {
           setTimeout(() => {
             setRepeatStatus('');
             setRepeatProgress({ current: 0, total: 0 });
-            if (!isStudyingRef.current) return;
-            moveToNextCardInStudy();
+            if (isStudyingRef.current) {
+              moveToNextCardInStudy();
+            } else if (navRepeatActiveRef.current) {
+              finishNavRepeatRef.current?.();
+            }
           }, 700);
         } else {
           setTimeout(() => {
-            if (!isStudyingRef.current) return;
+            if (!isRepeatCycleActive()) return;
             speakOneAndListen(expected, attemptIndex + 1, totalAttempts);
           }, 500);
         }
@@ -791,7 +916,7 @@ const App = () => {
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
 
         setTimeout(() => {
-          if (!isStudyingRef.current) return;
+          if (!isRepeatCycleActive()) return;
           speakOneAndListen(expected, attemptIndex, totalAttempts);
         }, 700);
       }
@@ -813,7 +938,7 @@ const App = () => {
         const totalAttempts = totalRepeatsRef.current;
         const word = currentWordRef.current;
         setTimeout(() => {
-          if (!isStudyingRef.current) return;
+          if (!isRepeatCycleActive()) return;
           speakOneAndListen(word, attemptIndex, totalAttempts);
         }, 600);
       }, 1500);
@@ -821,8 +946,7 @@ const App = () => {
     }
   }, [listening, isListeningForRepeat, speakOneAndListen]);
 
-  const handleMenuClick = () => setIsMenuOpen(!isMenuOpen);
-  const openSettings = () => { setIsMenuOpen(false); setIsSettingsOpen(true); };
+  const openSettings = () => setIsSettingsOpen(true);
   const closeSettings = () => setIsSettingsOpen(false);
   const toggleTheme = () => handleSettingChange('theme', settings.theme === 'dark' ? 'light' : 'dark');
   const handleOpenSettingsFile = () => { if (settingsFileInputRef.current) settingsFileInputRef.current.click(); };
@@ -835,6 +959,8 @@ const App = () => {
     showSvgBorder: { type: 'boolean', default: false },
     showTranscription: { type: 'boolean', default: true },
     showTranslation: { type: 'boolean', default: true },
+    loadLessonLocally: { type: 'boolean', default: false },
+    selectedLessonFile: { type: 'string', maxLength: 200, default: '' },
     theme: { type: 'enum', values: ['dark', 'light'], default: 'dark' },
     studyTime: { type: 'number', min: 3, max: 60, default: 10 },
     selectedVoiceName: { type: 'string', maxLength: 200, default: '' },
@@ -1012,6 +1138,7 @@ const App = () => {
       return;
     }
     if (dbLoaded && allRecords.length > 0) {
+      if (navRepeatActiveRef.current) cancelRepeatCycle();
       startStudyTimer();
       let modeMsg = '';
       if (settings.repeatAfterMe) {
@@ -1107,8 +1234,76 @@ const App = () => {
     }
   };
 
-  const loadDatabaseFromFile = async () => {
+  // ✅ Shared: parse a database payload and apply it to state
+  const applyDatabasePayload = useCallback((importedData, sourceName) => {
+    let records = [];
+    if (importedData.records && Array.isArray(importedData.records)) records = importedData.records;
+    else if (Array.isArray(importedData)) records = importedData;
+    else throw new Error("Invalid database file format");
+    if (records.length === 0) throw new Error("Database file contains no records");
+
+    const convertedRecords = records.map((record, idx) => {
+      if (record.card1 && record.card2) {
+        return {
+          id: record.id || idx + 1,
+          singular: {
+            word: record.card1.word || "",
+            transcription: record.card1.transcription || "",
+            translation: record.card1.translation || "",
+            svgCode: record.card1.svgCode || ""
+          },
+          plural: {
+            word: record.card2.word || "",
+            transcription: record.card2.transcription || "",
+            translation: record.card2.translation || "",
+            svgCode: record.card2.svgCode || ""
+          }
+        };
+      }
+      if (record.singular && record.plural) {
+        return {
+          id: record.id || idx + 1,
+          singular: {
+            word: record.singular.word || "",
+            transcription: record.singular.transcription || "",
+            translation: record.singular.translation || "",
+            svgCode: record.singular.svgCode || ""
+          },
+          plural: {
+            word: record.plural.word || "",
+            transcription: record.plural.transcription || "",
+            translation: record.plural.translation || "",
+            svgCode: record.plural.svgCode || ""
+          }
+        };
+      }
+      return {
+        id: record.id || idx + 1,
+        singular: {
+          word: record.word || "",
+          transcription: record.transcription || "",
+          translation: record.translation || "",
+          svgCode: record.svgCode || ""
+        },
+        plural: {
+          word: record.word || "",
+          transcription: record.transcription || "",
+          translation: record.translation || "",
+          svgCode: record.svgCode || ""
+        }
+      };
+    });
+    setAllRecords(convertedRecords);
+    setCurrentIndex(0);
+    setCurrentRecord(convertedRecords[0]);
+    setActiveCard('singular');
+    setDbLoaded(true);
+    setDbFileName(importedData.name || sourceName);
+  }, []);
+
+  const loadDatabaseFromFile = useCallback(async () => {
     if (isStudying) stopStudyTimer();
+    if (navRepeatActiveRef.current) cancelRepeatCycle();
     cancelAllSpeech();
     stopRepeatListening();
 
@@ -1122,70 +1317,8 @@ const App = () => {
       try {
         const contents = await file.text();
         const importedData = JSON.parse(contents);
-        let records = [];
-        if (importedData.records && Array.isArray(importedData.records)) records = importedData.records;
-        else if (Array.isArray(importedData)) records = importedData;
-        else throw new Error("Invalid database file format");
-        if (records.length === 0) throw new Error("Database file contains no records");
-
-        const convertedRecords = records.map((record, idx) => {
-          if (record.card1 && record.card2) {
-            return {
-              id: record.id || idx + 1,
-              singular: {
-                word: record.card1.word || "",
-                transcription: record.card1.transcription || "",
-                translation: record.card1.translation || "",
-                svgCode: record.card1.svgCode || ""
-              },
-              plural: {
-                word: record.card2.word || "",
-                transcription: record.card2.transcription || "",
-                translation: record.card2.translation || "",
-                svgCode: record.card2.svgCode || ""
-              }
-            };
-          }
-          if (record.singular && record.plural) {
-            return {
-              id: record.id || idx + 1,
-              singular: {
-                word: record.singular.word || "",
-                transcription: record.singular.transcription || "",
-                translation: record.singular.translation || "",
-                svgCode: record.singular.svgCode || ""
-              },
-              plural: {
-                word: record.plural.word || "",
-                transcription: record.plural.transcription || "",
-                translation: record.plural.translation || "",
-                svgCode: record.plural.svgCode || ""
-              }
-            };
-          }
-          return {
-            id: record.id || idx + 1,
-            singular: {
-              word: record.word || "",
-              transcription: record.transcription || "",
-              translation: record.translation || "",
-              svgCode: record.svgCode || ""
-            },
-            plural: {
-              word: record.word || "",
-              transcription: record.transcription || "",
-              translation: record.translation || "",
-              svgCode: record.svgCode || ""
-            }
-          };
-        });
-        setAllRecords(convertedRecords);
-        setCurrentIndex(0);
-        setCurrentRecord(convertedRecords[0]);
-        setActiveCard('singular');
-        setDbLoaded(true);
-        setDbFileName(importedData.name || file.name.replace(/\.(json|dbms)$/, ''));
-        alert(`✅ Database loaded successfully!\n\nFile: ${file.name}\nRecords: ${records.length}`);
+        applyDatabasePayload(importedData, file.name.replace(/\.(json|dbms)$/, ''));
+        alert(`✅ Database loaded successfully!\n\nFile: ${file.name}`);
       } catch (error) {
         alert(`❌ Failed to load database\n\nError: ${error.message}`);
         setDbLoaded(false);
@@ -1196,10 +1329,72 @@ const App = () => {
       }
     };
     fileInput.click();
-  };
+  }, [applyDatabasePayload, stopStudyTimer, cancelRepeatCycle, cancelAllSpeech, stopRepeatListening]);
+
+  // ✅ Load a lesson by filename from the lessons index folder.
+  const loadDatabaseFromServer = useCallback(async (fileOverride = null) => {
+    const indexUrl = LESSONS_INDEX_URL;
+    const file = (fileOverride || settingsRef.current.selectedLessonFile || '').trim();
+
+    if (!file) {
+      alert('⚠️ No lesson selected.\n\nPlease pick a lesson from the list, or enable "Load lesson locally" to pick a file from your device.');
+      return;
+    }
+
+    // Resolve the lesson URL relative to the index folder.
+    const baseDir = indexUrl.replace(/[^/]*$/, '');   // "/lessons/"
+    const lessonUrl = baseDir + file;
+
+    if (isStudying) stopStudyTimer();
+    if (navRepeatActiveRef.current) cancelRepeatCycle();
+    cancelAllSpeech();
+    stopRepeatListening();
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(lessonUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status} ${response.statusText}`);
+      }
+      const text = await response.text();
+      const importedData = JSON.parse(text);
+      const sourceName = file.replace(/\.(json|dbms)$/, '') || 'lesson';
+      applyDatabasePayload(importedData, sourceName);
+
+      // remember the choice for next time
+      setSettings((prev) => ({ ...prev, selectedLessonFile: file }));
+      setIsLessonPickerOpen(false);
+
+      alert(`✅ Lesson loaded!\n\nFile: ${file}`);
+    } catch (err) {
+      alert(`❌ Failed to load lesson\n\n${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [applyDatabasePayload, stopStudyTimer, cancelRepeatCycle, cancelAllSpeech, stopRepeatListening]);
+
+  // ✅ Dispatcher: local file picker OR open the server lesson picker
+  const loadDatabase = useCallback(() => {
+    if (settingsRef.current.loadLessonLocally) {
+      loadDatabaseFromFile();
+    } else {
+      setIsLessonPickerOpen(true);
+    }
+  }, [loadDatabaseFromFile]);
+
+  // ✅ Picker click handler
+  const handlePickLesson = useCallback((file) => {
+    if (!file) return;
+    setIsLessonPickerOpen(false);
+    loadDatabaseFromServer(file);
+  }, [loadDatabaseFromServer]);
 
   const nextRecord = () => {
     if (allRecords.length > 0 && currentIndex < allRecords.length - 1 && !isStudying) {
+      if (navRepeatActiveRef.current) cancelRepeatCycle();
       cancelAllSpeech(); clearManualPulse();
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex); setCurrentRecord(allRecords[newIndex]); setActiveCard('singular');
@@ -1207,6 +1402,7 @@ const App = () => {
   };
   const prevRecord = () => {
     if (allRecords.length > 0 && currentIndex > 0 && !isStudying) {
+      if (navRepeatActiveRef.current) cancelRepeatCycle();
       cancelAllSpeech(); clearManualPulse();
       const newIndex = currentIndex - 1;
       setCurrentIndex(newIndex); setCurrentRecord(allRecords[newIndex]); setActiveCard('singular');
@@ -1230,10 +1426,9 @@ const App = () => {
     if (isStudying) return;
     if (!dbLoaded || !currentRecord) return;
     if (!voiceSupport) return;
-    const currentVoice = getCurrentVoice();
-    if (!currentVoice) return;
 
-    let word = '', translation = '';
+    let word = '';
+    let translation = '';
     if (cardType === 'singular') {
       word = currentRecord.singular?.word || '';
       translation = currentRecord.singular?.translation || '';
@@ -1242,6 +1437,20 @@ const App = () => {
       translation = currentRecord.plural?.translation || '';
     }
     if (!word || word.trim() === '') return;
+
+    if (settings.repeatAfterMe) {
+      if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
+        cancelRepeatCycle();
+        setCardPulsing(cardType, false);
+        setManualPulseCard(null);
+        return;
+      }
+      startNavRepeatCycleRef.current?.(cardType, word);
+      return;
+    }
+
+    const currentVoice = getCurrentVoice();
+    if (!currentVoice) return;
 
     clearManualPulse();
     setCardPulsing(cardType, true);
@@ -1295,6 +1504,10 @@ const App = () => {
 
   const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
 
+  const showRepeatChip =
+    (settings.repeatAfterMe && isStudying) ||
+    (settings.repeatAfterMe && navRepeatActiveRef.current);
+
   return (
     <div className={appClassName} style={appStyle}>
       <div className="top-bar-wrapper">
@@ -1315,18 +1528,17 @@ const App = () => {
             {!isStudying && (
               <button
                 className="menu-button"
-                onClick={handleMenuClick}
-                aria-label="Open main menu"
-                aria-haspopup="true"
-                aria-expanded={isMenuOpen}
+                onClick={openSettings}
+                aria-label="Open settings"
+                title="Settings"
               >
-                Menu
+                <span aria-hidden="true">🔧</span>
               </button>
             )}
 
             {dbLoaded && currentRecord && (
               <div
-                className={`header-db-info ${settings.repeatAfterMe && isStudying ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
+                className={`header-db-info ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
                 role="status"
                 aria-live="polite"
                 aria-atomic="true"
@@ -1346,7 +1558,7 @@ const App = () => {
                   </>
                 )}
 
-                {isListeningForRepeat && !(settings.repeatAfterMe && isStudying) && (
+                {isListeningForRepeat && !showRepeatChip && (
                   <>
                     <span className="db-info-separator" aria-hidden="true">|</span>
                     <span className="db-info-timer" role="status" aria-live="polite"
@@ -1356,7 +1568,7 @@ const App = () => {
                   </>
                 )}
 
-                {settings.repeatAfterMe && isStudying && (
+                {showRepeatChip && (
                   <>
                     <span className="db-info-separator" aria-hidden="true">|</span>
                     <span className="db-info-repeat" aria-live="polite">
@@ -1398,15 +1610,32 @@ const App = () => {
 
             <button
               className={`load-db-button ${isStudying ? 'hidden-but-reserved' : ''}`}
-              onClick={loadDatabaseFromFile}
+              onClick={loadDatabase}
               disabled={isLoading || isStudying}
               aria-busy={isLoading}
-              aria-label={isLoading ? 'Loading database' : 'Load database file'}
+              aria-label={
+                isLoading
+                  ? 'Loading database'
+                  : settings.loadLessonLocally
+                    ? 'Load database from local files'
+                    : 'Load database from server'
+              }
+              title={
+                isLoading
+                  ? 'Loading database'
+                  : settings.loadLessonLocally
+                    ? 'Load lesson locally'
+                    : 'Load lesson from server'
+              }
             >
-              {isLoading ? 'Loading...' : (<><span aria-hidden="true">📂 </span>Load DB</>)}
+              {isLoading ? (
+                'Loading...'
+              ) : (
+                <span aria-hidden="true">{settings.loadLessonLocally ? '📁' : '🌐'}</span>
+              )}
             </button>
 
-            {settings.repeatAfterMe && isStudying && lastRecognized && (
+            {showRepeatChip && lastRecognized && (
               <span
                 className={`recognized-chip recognized-${repeatStatus || 'idle'}`}
                 role="status"
@@ -1503,7 +1732,7 @@ const App = () => {
             aria-labelledby="settings-title"
           >
             <div className="settings-header">
-              <h2 id="settings-title">⚙️ Settings</h2>
+              <h2 id="settings-title">🔧 Settings</h2>
               <button className="settings-close" onClick={closeSettings} aria-label="Close settings" title="Close settings">
                 <span aria-hidden="true">×</span>
               </button>
@@ -1698,6 +1927,10 @@ const App = () => {
                   <label><input type="checkbox" checked={settings.showTranslation}
                     onChange={(e) => handleSettingChange('showTranslation', e.target.checked)} /> Show Translation</label>
                 </div>
+                <div className="setting-item checkbox">
+                  <label><input type="checkbox" checked={settings.loadLessonLocally}
+                    onChange={(e) => handleSettingChange('loadLessonLocally', e.target.checked)} /> Load lesson locally</label>
+                </div>
               </div>
             </div>
             <div className="settings-footer">
@@ -1710,11 +1943,111 @@ const App = () => {
         </div>
       )}
 
-      {isMenuOpen && (
-        <div className="menu-dropdown" role="menu" aria-label="Main menu">
-          <button className="menu-item" role="menuitem" type="button">Home</button>
-          <button className="menu-item" role="menuitem" type="button" onClick={openSettings}>⚙️ Settings</button>
-          <button className="menu-item" role="menuitem" type="button">About</button>
+      {isLessonPickerOpen && (
+        <div
+          className="settings-overlay"
+          onClick={() => { if (!isLoading) setIsLessonPickerOpen(false); }}
+          role="presentation"
+        >
+          <div
+            className="settings-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lesson-picker-title"
+          >
+            <div className="settings-header">
+              <h2 id="lesson-picker-title">📂 Choose a lesson</h2>
+              <button
+                className="settings-close"
+                onClick={() => { if (!isLoading) setIsLessonPickerOpen(false); }}
+                aria-label="Close lesson picker"
+                title="Close"
+                disabled={isLoading}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+
+            <div className="settings-content">
+              {isLoadingLessonsList && (
+                <div className="setting-item">
+                  <small style={{ color: '#aaa', fontSize: '0.9rem' }}>Loading lessons…</small>
+                </div>
+              )}
+
+              {!isLoadingLessonsList && lessonsListError && (
+                <div className="setting-item">
+                  <small style={{ color: '#f44336', fontSize: '0.85rem' }}>
+                    ⚠️ Could not load lessons list: {lessonsListError}
+                  </small>
+                </div>
+              )}
+
+              {!isLoadingLessonsList && !lessonsListError && lessonsList.length === 0 && (
+                <div className="setting-item">
+                  <small style={{ color: '#aaa', fontSize: '0.9rem' }}>
+                    No lessons available.
+                  </small>
+                </div>
+              )}
+
+              {!isLoadingLessonsList && lessonsList.map((lesson) => (
+                <button
+                  key={lesson.file}
+                  type="button"
+                  onClick={() => handlePickLesson(lesson.file)}
+                  disabled={isLoading}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '0.7rem 0.9rem',
+                    marginBottom: '0.5rem',
+                    background: '#3c3c3c',
+                    border: '1px solid #555',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '0.95rem',
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
+                    opacity: isLoading ? 0.6 : 1,
+                    transition: 'background 0.2s ease, border-color 0.2s ease, transform 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isLoading) {
+                      e.currentTarget.style.background = '#4a4a4a';
+                      e.currentTarget.style.borderColor = '#0078d4';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#3c3c3c';
+                    e.currentTarget.style.borderColor = '#555';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>
+                    {lesson.title || lesson.file}
+                  </div>
+                  {lesson.title && lesson.file !== lesson.title && (
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: 2 }}>
+                      {lesson.file}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="settings-footer">
+              <button
+                className="settings-cancel"
+                onClick={() => { if (!isLoading) setIsLessonPickerOpen(false); }}
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
