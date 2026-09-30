@@ -11,10 +11,29 @@
 // App.jsx - NEW: navigation-mode click runs repeat-after-me cycle when enabled
 // App.jsx - NEW: "Load lesson locally" checkbox in Display Options
 // App.jsx - NEW: gear button opens Settings modal directly (no menu dropdown)
-// App.jsx - NEW: Load DB button shows 📁 / 🌐 based on loadLessonLocally
 // App.jsx - NEW: server mode fetches /lessons/index.json and lists lessons
 // App.jsx - NEW: server mode opens a picker modal on Load DB click
 // App.jsx - CLEANUP: manifest URL is a constant; not in settings or UI
+// App.jsx - NEW: display-info block in Settings (viewport, screen, orientation)
+// App.jsx - NEW: status pill icon reflects loadLessonLocally
+// App.jsx - NEW: status pill is a clickable button; Load DB button removed
+// App.jsx - NEW: "Repeat pronunciation if words not equal" checkbox (repeat-after-me contexts)
+// App.jsx - NEW: status pill shows "ID: n / total" in loaded state
+// App.jsx - REMOVED: "Lesson loaded!" success alert (server mode)
+// App.jsx - RENAMED: repeatOnRecognizeFault → repeatOnWordsNotEqual
+// App.jsx - RENAMED: "Repeat word:" label → "Attempt:"
+// App.jsx - BEHAVIOR:
+//   An "Attempt" = pronounce → listen → recognize → compare → write result.
+//   Repeat-after-me must go through ALL Attempt values per card.
+//   Checkbox ☐ unchecked: on fault, consume the attempt → pronounce again + listen
+//                         for the next attempt. After the last attempt → advance.
+//   Checkbox ✓ checked:   on fault, re-pronounce + listen again WITHOUT consuming
+//                         the attempt (retry the same attempt until match).
+// App.jsx - FIXED: When a DB is loaded (locally or from server), stop any leftover
+//                 pulse on both cards.
+// App.jsx - NEW: In Auto Study + Repeat-after-me, track cards that failed all
+//                 attempts and report them at session completion.
+//                 Report line format: `N. word - "recognized"` (or `N. word -`).
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -79,6 +98,51 @@ const stripTrailingPunctuation = (text) => {
   return String(text).replace(/[.,!?;:]+$/g, '').trim();
 };
 
+const readDisplayInfo = () => {
+  if (typeof window === 'undefined') return null;
+
+  const s = window.screen;
+  const dpr = window.devicePixelRatio || 1;
+  const so = s && s.orientation ? s.orientation : null;
+
+  return {
+    viewportCssWidth: window.innerWidth,
+    viewportCssHeight: window.innerHeight,
+    viewportClientWidth: document.documentElement.clientWidth,
+    viewportClientHeight: document.documentElement.clientHeight,
+    screenCssWidth: s ? s.width : null,
+    screenCssHeight: s ? s.height : null,
+    screenDeviceWidth: s ? Math.round(s.width * dpr) : null,
+    screenDeviceHeight: s ? Math.round(s.height * dpr) : null,
+    devicePixelRatio: dpr,
+    screenOrientationType: so ? so.type : null,
+    screenOrientationAngle: so && typeof so.angle === 'number' ? so.angle : null,
+  };
+};
+
+const useDisplayInfo = () => {
+  const [info, setInfo] = useState(() => readDisplayInfo());
+
+  useEffect(() => {
+    const update = () => setInfo(readDisplayInfo());
+    update();
+
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+
+    const so = window.screen && window.screen.orientation;
+    if (so && so.addEventListener) so.addEventListener('change', update);
+
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+      if (so && so.removeEventListener) so.removeEventListener('change', update);
+    };
+  }, []);
+
+  return info;
+};
+
 // =============================================================
 // Component
 // =============================================================
@@ -109,6 +173,8 @@ const App = () => {
   const [lessonsListError, setLessonsListError] = useState('');
   const [isLoadingLessonsList, setIsLoadingLessonsList] = useState(false);
 
+  const displayInfo = useDisplayInfo();
+
   const [settings, setSettings] = useState({
     cardWidth: 400,
     cardHeight: 400,
@@ -129,6 +195,7 @@ const App = () => {
     translationRepeatTimes: 1,
     randomOrder: false,
     repeatAfterMe: false,
+    repeatOnWordsNotEqual: true,
   });
 
   const singularSvgRef = useRef(null);
@@ -163,6 +230,7 @@ const App = () => {
   const voicesInitializedRef = useRef(false);
   const mountedRef = useRef(true);
 
+  const failedCardsRef = useRef([]); // [{ word, heard }] for repeat-after-me failures
   const expectingUserSpeechRef = useRef(false);
   const expectedWordRef = useRef('');
   const currentRepeatIndexRef = useRef(0);
@@ -206,7 +274,6 @@ const App = () => {
     }
   }, []);
 
-  // ✅ Fetch the lessons manifest on mount
   useEffect(() => {
     const url = LESSONS_INDEX_URL;
     let cancelled = false;
@@ -516,6 +583,7 @@ const App = () => {
 
   useEffect(() => { startRepeatListeningRef.current = startRepeatListening; });
 
+  // A full attempt = pronounce → listen → recognize → compare → write result.
   const speakOneAndListen = useCallback((word, attemptIndex, totalAttempts) => {
     if (!isRepeatCycleActive()) return;
     currentRepeatIndexRef.current = attemptIndex;
@@ -736,7 +804,30 @@ const App = () => {
     if (showCompletionAlert && !completionAlertShownRef.current) {
       isCompletingRef.current = true;
       completionAlertShownRef.current = true;
-      alert('🎉 Study session completed! Well done!');
+
+      const failed = failedCardsRef.current;
+
+      if (settingsRef.current.repeatAfterMe && failed.length > 0) {
+        const lines = failed.map((entry, i) => {
+          const heard = entry.heard && entry.heard.trim() !== ''
+            ? ` "${entry.heard}"`
+            : '';
+          return `${i + 1}. ${entry.word} -${heard}`;
+        });
+
+        alert(
+          `🎉 Repeat After Me session completed!\n\n` +
+          `Not passed ${failed.length} card(s):\n` +
+          lines.join('\n')
+        );
+      } else if (settingsRef.current.repeatAfterMe) {
+        alert('🎉 Repeat After Me session completed!\n\nAll cards passed!');
+      } else {
+        alert('🎉 Study session completed! Well done!');
+      }
+
+      failedCardsRef.current = [];
+
       setTimeout(() => {
         completionAlertShownRef.current = false;
         isCompletingRef.current = false;
@@ -770,6 +861,9 @@ const App = () => {
 
     completionAlertShownRef.current = false;
     isCompletingRef.current = false;
+
+    // Reset the repeat-after-me failure list for this session.
+    failedCardsRef.current = [];
 
     let firstRecord = currentRecord;
     let firstIndex = currentIndex;
@@ -917,7 +1011,35 @@ const App = () => {
 
         setTimeout(() => {
           if (!isRepeatCycleActive()) return;
-          speakOneAndListen(expected, attemptIndex, totalAttempts);
+          const isLastAttempt = attemptIndex + 1 >= totalAttempts;
+
+          if (settingsRef.current.repeatOnWordsNotEqual) {
+            // CHECKED: do NOT consume the attempt. Re-pronounce + listen again
+            // on the SAME attempt index.
+            speakOneAndListen(expected, attemptIndex, totalAttempts);
+          } else {
+            // UNCHECKED: consume the attempt.
+            //  - if attempts remain → next attempt (pronounce again + listen)
+            //  - if none remain → advance
+            if (isLastAttempt) {
+              // Record the failure ONLY for auto-study + repeat-after-me.
+              if (settingsRef.current.repeatAfterMe && isStudyingRef.current) {
+                failedCardsRef.current.push({
+                  word: expected,
+                  heard: cleaned || '',
+                });
+              }
+              setRepeatStatus('');
+              setRepeatProgress({ current: 0, total: 0 });
+              if (isStudyingRef.current) {
+                moveToNextCardInStudy();
+              } else if (navRepeatActiveRef.current) {
+                finishNavRepeatRef.current?.();
+              }
+            } else {
+              speakOneAndListen(expected, attemptIndex + 1, totalAttempts);
+            }
+          }
         }, 700);
       }
     }, 800);
@@ -939,7 +1061,33 @@ const App = () => {
         const word = currentWordRef.current;
         setTimeout(() => {
           if (!isRepeatCycleActive()) return;
-          speakOneAndListen(word, attemptIndex, totalAttempts);
+          const isLastAttempt = attemptIndex + 1 >= totalAttempts;
+
+          if (settingsRef.current.repeatOnWordsNotEqual) {
+            // CHECKED: do NOT consume the attempt. Re-pronounce + listen again
+            // on the SAME attempt index.
+            speakOneAndListen(word, attemptIndex, totalAttempts);
+          } else {
+            // UNCHECKED: consume the attempt.
+            if (isLastAttempt) {
+              // Record the failure ONLY for auto-study + repeat-after-me.
+              if (settingsRef.current.repeatAfterMe && isStudyingRef.current) {
+                failedCardsRef.current.push({
+                  word,
+                  heard: '', // silence: nothing was heard
+                });
+              }
+              setRepeatStatus('');
+              setRepeatProgress({ current: 0, total: 0 });
+              if (isStudyingRef.current) {
+                moveToNextCardInStudy();
+              } else if (navRepeatActiveRef.current) {
+                finishNavRepeatRef.current?.();
+              }
+            } else {
+              speakOneAndListen(word, attemptIndex + 1, totalAttempts);
+            }
+          }
         }, 600);
       }, 1500);
       return () => clearTimeout(handle);
@@ -971,6 +1119,7 @@ const App = () => {
     translationRepeatTimes: { type: 'number', min: 1, max: 5, default: 3 },
     randomOrder: { type: 'boolean', default: true },
     repeatAfterMe: { type: 'boolean', default: false },
+    repeatOnWordsNotEqual: { type: 'boolean', default: true },
   };
 
   const validateSettings = (raw) => {
@@ -1234,7 +1383,6 @@ const App = () => {
     }
   };
 
-  // ✅ Shared: parse a database payload and apply it to state
   const applyDatabasePayload = useCallback((importedData, sourceName) => {
     let records = [];
     if (importedData.records && Array.isArray(importedData.records)) records = importedData.records;
@@ -1299,6 +1447,14 @@ const App = () => {
     setActiveCard('singular');
     setDbLoaded(true);
     setDbFileName(importedData.name || sourceName);
+
+    // Stop any leftover pulse on both cards from a previous session/DB.
+    setCardPulsing('singular', false);
+    setCardPulsing('plural', false);
+    setManualPulseCard(null);
+
+    // Reset the repeat-after-me failure list for the new DB.
+    failedCardsRef.current = [];
   }, []);
 
   const loadDatabaseFromFile = useCallback(async () => {
@@ -1331,7 +1487,6 @@ const App = () => {
     fileInput.click();
   }, [applyDatabasePayload, stopStudyTimer, cancelRepeatCycle, cancelAllSpeech, stopRepeatListening]);
 
-  // ✅ Load a lesson by filename from the lessons index folder.
   const loadDatabaseFromServer = useCallback(async (fileOverride = null) => {
     const indexUrl = LESSONS_INDEX_URL;
     const file = (fileOverride || settingsRef.current.selectedLessonFile || '').trim();
@@ -1341,8 +1496,7 @@ const App = () => {
       return;
     }
 
-    // Resolve the lesson URL relative to the index folder.
-    const baseDir = indexUrl.replace(/[^/]*$/, '');   // "/lessons/"
+    const baseDir = indexUrl.replace(/[^/]*$/, '');
     const lessonUrl = baseDir + file;
 
     if (isStudying) stopStudyTimer();
@@ -1364,11 +1518,8 @@ const App = () => {
       const sourceName = file.replace(/\.(json|dbms)$/, '') || 'lesson';
       applyDatabasePayload(importedData, sourceName);
 
-      // remember the choice for next time
       setSettings((prev) => ({ ...prev, selectedLessonFile: file }));
       setIsLessonPickerOpen(false);
-
-      alert(`✅ Lesson loaded!\n\nFile: ${file}`);
     } catch (err) {
       alert(`❌ Failed to load lesson\n\n${err.message}`);
     } finally {
@@ -1376,7 +1527,6 @@ const App = () => {
     }
   }, [applyDatabasePayload, stopStudyTimer, cancelRepeatCycle, cancelAllSpeech, stopRepeatListening]);
 
-  // ✅ Dispatcher: local file picker OR open the server lesson picker
   const loadDatabase = useCallback(() => {
     if (settingsRef.current.loadLessonLocally) {
       loadDatabaseFromFile();
@@ -1385,7 +1535,6 @@ const App = () => {
     }
   }, [loadDatabaseFromFile]);
 
-  // ✅ Picker click handler
   const handlePickLesson = useCallback((file) => {
     if (!file) return;
     setIsLessonPickerOpen(false);
@@ -1536,52 +1685,78 @@ const App = () => {
               </button>
             )}
 
-            {dbLoaded && currentRecord && (
-              <div
-                className={`header-db-info ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                <span className="db-info-label" aria-hidden="true">📁</span>
-                <span className="db-info-name">{dbFileName}</span>
-                <span className="db-info-separator" aria-hidden="true">|</span>
-                <span className="db-info-id">ID: {currentRecord.id}</span>
+            {/* ✅ Status pill: always visible; acts as the Load lesson button */}
+            <button
+              type="button"
+              className={`header-db-info header-db-info-button ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
+              onClick={loadDatabase}
+              disabled={isLoading || isStudying}
+              aria-live="polite"
+              aria-atomic="true"
+              aria-label={
+                isLoading
+                  ? 'Loading lesson'
+                  : settings.loadLessonLocally
+                    ? 'Load lesson from local files'
+                    : 'Load lesson from server'
+              }
+              title={
+                isLoading
+                  ? 'Loading lesson'
+                  : settings.loadLessonLocally
+                    ? 'Load lesson locally'
+                    : 'Load lesson from server'
+              }
+            >
+              <span className="db-info-label" aria-hidden="true">
+                {settings.loadLessonLocally ? '📁' : '🌐'}
+              </span>
 
-                {isSpeaking && (
-                  <>
-                    <span className="db-info-separator" aria-hidden="true">|</span>
-                    <span className="db-info-timer" role="status" aria-live="polite"
-                      aria-label="Currently speaking" title="Speaking">
-                      <span aria-hidden="true">🔊</span>
-                    </span>
-                  </>
-                )}
+              {dbLoaded && currentRecord ? (
+                <>
+                  <span className="db-info-name">{dbFileName}</span>
+                  <span className="db-info-separator" aria-hidden="true">|</span>
+                  <span className="db-info-id">ID: {currentRecord.id} / {allRecords.length}</span>
 
-                {isListeningForRepeat && !showRepeatChip && (
-                  <>
-                    <span className="db-info-separator" aria-hidden="true">|</span>
-                    <span className="db-info-timer" role="status" aria-live="polite"
-                      aria-label="Listening for your voice" title="Listening">
-                      <span aria-hidden="true">🎤</span>
-                    </span>
-                  </>
-                )}
+                  {isSpeaking && (
+                    <>
+                      <span className="db-info-separator" aria-hidden="true">|</span>
+                      <span className="db-info-timer" role="status" aria-live="polite"
+                        aria-label="Currently speaking" title="Speaking">
+                        <span aria-hidden="true">🔊</span>
+                      </span>
+                    </>
+                  )}
 
-                {showRepeatChip && (
-                  <>
-                    <span className="db-info-separator" aria-hidden="true">|</span>
-                    <span className="db-info-repeat" aria-live="polite">
-                      {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
-                      {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
-                      {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
-                      {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
-                      {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat mode</span></>)}
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
+                  {isListeningForRepeat && !showRepeatChip && (
+                    <>
+                      <span className="db-info-separator" aria-hidden="true">|</span>
+                      <span className="db-info-timer" role="status" aria-live="polite"
+                        aria-label="Listening for your voice" title="Listening">
+                        <span aria-hidden="true">🎤</span>
+                      </span>
+                    </>
+                  )}
+
+                  {showRepeatChip && (
+                    <>
+                      <span className="db-info-separator" aria-hidden="true">|</span>
+                      <span className="db-info-repeat" aria-live="polite">
+                        {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
+                        {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                        {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                        {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
+                        {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat mode</span></>)}
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                isLoading ? (
+                  <span className="db-info-name">Loading…</span>
+                ) : null
+              )}
+            </button>
           </div>
 
           <div className="header-buttons">
@@ -1607,33 +1782,6 @@ const App = () => {
                 </button>
               </>
             )}
-
-            <button
-              className={`load-db-button ${isStudying ? 'hidden-but-reserved' : ''}`}
-              onClick={loadDatabase}
-              disabled={isLoading || isStudying}
-              aria-busy={isLoading}
-              aria-label={
-                isLoading
-                  ? 'Loading database'
-                  : settings.loadLessonLocally
-                    ? 'Load database from local files'
-                    : 'Load database from server'
-              }
-              title={
-                isLoading
-                  ? 'Loading database'
-                  : settings.loadLessonLocally
-                    ? 'Load lesson locally'
-                    : 'Load lesson from server'
-              }
-            >
-              {isLoading ? (
-                'Loading...'
-              ) : (
-                <span aria-hidden="true">{settings.loadLessonLocally ? '📁' : '🌐'}</span>
-              )}
-            </button>
 
             {showRepeatChip && lastRecognized && (
               <span
@@ -1809,7 +1957,7 @@ const App = () => {
 
                 {settings.repeatAfterMe && (
                   <div className="setting-item">
-                    <label htmlFor="setting-repeatAfterMeTimes">Repeat word:</label>
+                    <label htmlFor="setting-repeatAfterMeTimes">Attempt:</label>
                     <input
                       id="setting-repeatAfterMeTimes"
                       type="number"
@@ -1843,6 +1991,19 @@ const App = () => {
                     <small style={{ color: '#4caf50', fontSize: '0.75rem' }}>
                       ✓ The word is pronounced {settings.repeatTimes} time(s). After each pronunciation the mic listens once. Each attempt must match before moving on.
                     </small>
+                  </div>
+                )}
+
+                {settings.repeatAfterMe && browserSupportsSpeechRecognition && (
+                  <div className="setting-item checkbox">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={settings.repeatOnWordsNotEqual}
+                        onChange={(e) => handleSettingChange('repeatOnWordsNotEqual', e.target.checked)}
+                      />
+                      Repeat pronunciation if words not equal
+                    </label>
                   </div>
                 )}
 
@@ -1931,6 +2092,45 @@ const App = () => {
                   <label><input type="checkbox" checked={settings.loadLessonLocally}
                     onChange={(e) => handleSettingChange('loadLessonLocally', e.target.checked)} /> Load lesson locally</label>
                 </div>
+
+                {displayInfo && (
+                  <div
+                    className="setting-item"
+                    style={{
+                      display: 'block',
+                      fontFamily: 'monospace',
+                      fontSize: '0.78rem',
+                      lineHeight: 1.5,
+                      color: '#aaa',
+                      background: '#1f1f1f',
+                      border: '1px solid #3c3c3c',
+                      borderRadius: '8px',
+                      padding: '0.6rem 0.8rem',
+                      marginTop: '0.4rem',
+                    }}
+                  >
+                    <div><strong style={{ color: '#e0e0e0' }}>CSS px — layout viewport</strong></div>
+                    <div>
+                      {displayInfo.viewportCssWidth} × {displayInfo.viewportCssHeight} px
+                      {' '}(client: {displayInfo.viewportClientWidth} × {displayInfo.viewportClientHeight})
+                    </div>
+
+                    <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Screen resolution</strong></div>
+                    <div>
+                      CSS: {displayInfo.screenCssWidth} × {displayInfo.screenCssHeight} px
+                    </div>
+                    <div>
+                      Physical: {displayInfo.screenDeviceWidth} × {displayInfo.screenDeviceHeight} px
+                      {' '}(DPR {displayInfo.devicePixelRatio})
+                    </div>
+
+                    <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Screen orientation</strong></div>
+                    <div>
+                      {displayInfo.screenOrientationType || 'n/a'}
+                      {displayInfo.screenOrientationAngle != null ? ` · ${displayInfo.screenOrientationAngle}°` : ''}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="settings-footer">

@@ -9,6 +9,8 @@
    - Recognized-word chip shows ONLY the recognized word(s)
    - Recognized-word chip font is larger than the Stop button (16px desktop / 14px phone)
    - Recognized-word chip soft-pulses while listening; flashes green when matched
+   - Status pill is a clickable button that mirrors the Load DB action
+   - FIXED: Settings button and Status pill button share the same height (32px)
 */
 
 /* ============================================================
@@ -85,6 +87,14 @@ body.light { background: #f5f5f5; color: #333; }
   cursor: pointer;
   transition: background 0.3s ease;
   flex-shrink: 0;
+
+  /* Shared height for header buttons */
+  height: 32px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .menu-button:hover { background: #005a9e; }
 
@@ -108,6 +118,55 @@ body.light { background: #f5f5f5; color: #333; }
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
+}
+
+/* ✅ Button reset for the clickable status pill.
+   The visual styling comes entirely from .header-db-info — this only
+   removes default browser button chrome so it renders like a pill.
+   Height is forced to match .menu-button. */
+.header-db-info-button {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+
+  /* Match the Settings (.menu-button) height */
+  height: 32px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.header-db-info-button:disabled {
+  cursor: not-allowed;
+  background: transparent;   /* show the top bar through it → exact match */
+  border-color: transparent;
+}
+
+body.light .header-db-info-button:disabled {
+  background: transparent;
+  border-color: transparent;
+}
+
+.header-db-info-button:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: 2px;
+}
+
+/* Subtle hover affordance on hover-capable devices only
+   (no sticky-hover on Android touch) */
+@media (hover: hover) {
+  .header-db-info-button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+  body.light .header-db-info-button:hover:not(:disabled) {
+    background: rgba(0, 120, 212, 0.18);
+    border-color: rgba(0, 120, 212, 0.45);
+  }
 }
 
 .db-info-label { font-size: 0.9rem; flex-shrink: 0; }
@@ -176,7 +235,6 @@ body.light .header-db-info.repeat-error     .db-info-repeat { background: rgba(2
 /* ============================================================
    RECOGNIZED WORD CHIP (repeat-after-me)
    Shows ONLY the recognized word(s) — no icons, no labels.
-   Font is larger than the Stop button for readability.
    Soft-pulses while listening; flashes green when matched.
    ============================================================ */
 .recognized-chip {
@@ -199,14 +257,12 @@ body.light .header-db-info.repeat-error     .db-info-repeat { background: rgba(2
   min-width: 0;
 }
 
-/* Idle (rarely shown) */
 .recognized-chip.recognized-idle {
   background: rgba(255, 255, 255, 0.15);
   color: #e0e0e0;
   border-color: rgba(255, 255, 255, 0.25);
 }
 
-/* Listening — soft blue pulse */
 .recognized-chip.recognized-listening {
   background: rgba(33, 150, 243, 0.25);
   color: #90caf9;
@@ -214,7 +270,6 @@ body.light .header-db-info.repeat-error     .db-info-repeat { background: rgba(2
   animation: recognizedListeningPulse 1.4s ease-in-out infinite;
 }
 
-/* Matched — bright green flash */
 .recognized-chip.recognized-matched {
   background: rgba(76, 175, 80, 0.35);
   color: #c8e6c9;
@@ -222,14 +277,12 @@ body.light .header-db-info.repeat-error     .db-info-repeat { background: rgba(2
   animation: recognizedMatchedFlash 0.7s ease-in-out infinite;
 }
 
-/* Retry — orange, no animation */
 .recognized-chip.recognized-retry {
   background: rgba(255, 152, 0, 0.3);
   color: #ffcc80;
   border-color: rgba(255, 152, 0, 0.4);
 }
 
-/* Error — red, no animation */
 .recognized-chip.recognized-error {
   background: rgba(244, 67, 54, 0.3);
   color: #ef9a9a;
@@ -256,7 +309,6 @@ body.light .header-db-info.repeat-error     .db-info-repeat { background: rgba(2
   }
 }
 
-/* ---- Light mode ---- */
 body.light .recognized-chip {
   background: rgba(0, 0, 0, 0.05);
   color: #333;
@@ -944,7 +996,6 @@ body.light .active-pulse {
   .db-info-repeat span:not([aria-hidden="true"]) { display: none; }
   .db-info-repeat { padding: 2px 6px; }
 
-  /* Recognized chip — larger than Stop button, sized for phone */
   .recognized-chip {
     max-width: 150px;
     padding: 2px 8px;
