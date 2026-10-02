@@ -34,7 +34,17 @@
 // App.jsx - NEW: In Auto Study + Repeat-after-me, track cards that failed all
 //                 attempts and report them at session completion.
 //                 Report line format: `N. word - "recognized"` (or `N. word -`).
-// App.jsx - NEW: "Top panel width (px)" setting controls top bar + cards row width.
+// App.jsx - NEW: "Auto align elements" checkbox (Settings → Card Appearance).
+//                 Checked (default):
+//                   • PORTRAIT / square: top bar & cards row fill the layout
+//                     viewport width; cards auto-size to fill it.
+//                   • LANDSCAPE: cards row is inset 25px from left, right,
+//                     and bottom edges; 25px between the top bar and the
+//                     cards row; 25px between the two cards; both cards
+//                     sized to fill the remaining space exactly.
+//                   Dimension fields are hidden.
+//                 Unchecked: raw numeric settings are used as-is; dimension
+//                   fields are shown.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -44,6 +54,17 @@ import './App.css';
 // Constants
 // =============================================================
 const LESSONS_INDEX_URL = '/lessons/index.json';
+
+// Auto-align constants
+const AUTO_H_PADDING   = 24;   // used in portrait (12px each side)
+const MIN_CARD_WIDTH   = 180;
+const MIN_CARD_HEIGHT  = 180;
+
+// Landscape auto-align constants
+const LANDSCAPE_MARGIN     = 25;   // 25px left, right, bottom
+const LANDSCAPE_GAP        = 25;   // gap between the two cards
+const LANDSCAPE_TOP_GAP    = 25;   // 25px between top bar and cards
+const TOP_BAR_HEIGHT       = 52;   // must match --top-bar-height in App.css
 
 // =============================================================
 // Utilities
@@ -126,18 +147,25 @@ const useDisplayInfo = () => {
 
   useEffect(() => {
     const update = () => setInfo(readDisplayInfo());
+
     update();
 
+    const onOrientation = () => {
+      update();
+      setTimeout(update, 150);
+      setTimeout(update, 400);
+    };
+
     window.addEventListener('resize', update);
-    window.addEventListener('orientationchange', update);
+    window.addEventListener('orientationchange', onOrientation);
 
     const so = window.screen && window.screen.orientation;
-    if (so && so.addEventListener) so.addEventListener('change', update);
+    if (so && so.addEventListener) so.addEventListener('change', onOrientation);
 
     return () => {
       window.removeEventListener('resize', update);
-      window.removeEventListener('orientationchange', update);
-      if (so && so.removeEventListener) so.removeEventListener('change', update);
+      window.removeEventListener('orientationchange', onOrientation);
+      if (so && so.removeEventListener) so.removeEventListener('change', onOrientation);
     };
   }, []);
 
@@ -177,6 +205,7 @@ const App = () => {
   const displayInfo = useDisplayInfo();
 
   const [settings, setSettings] = useState({
+    autoAlign: true,
     topPanelWidth: 916,
     cardWidth: 400,
     cardHeight: 400,
@@ -232,7 +261,7 @@ const App = () => {
   const voicesInitializedRef = useRef(false);
   const mountedRef = useRef(true);
 
-  const failedCardsRef = useRef([]); // [{ word, heard }] for repeat-after-me failures
+  const failedCardsRef = useRef([]);
   const expectingUserSpeechRef = useRef(false);
   const expectedWordRef = useRef('');
   const currentRepeatIndexRef = useRef(0);
@@ -585,7 +614,6 @@ const App = () => {
 
   useEffect(() => { startRepeatListeningRef.current = startRepeatListening; });
 
-  // A full attempt = pronounce → listen → recognize → compare → write result.
   const speakOneAndListen = useCallback((word, attemptIndex, totalAttempts) => {
     if (!isRepeatCycleActive()) return;
     currentRepeatIndexRef.current = attemptIndex;
@@ -864,7 +892,6 @@ const App = () => {
     completionAlertShownRef.current = false;
     isCompletingRef.current = false;
 
-    // Reset the repeat-after-me failure list for this session.
     failedCardsRef.current = [];
 
     let firstRecord = currentRecord;
@@ -1016,15 +1043,9 @@ const App = () => {
           const isLastAttempt = attemptIndex + 1 >= totalAttempts;
 
           if (settingsRef.current.repeatOnWordsNotEqual) {
-            // CHECKED: do NOT consume the attempt. Re-pronounce + listen again
-            // on the SAME attempt index.
             speakOneAndListen(expected, attemptIndex, totalAttempts);
           } else {
-            // UNCHECKED: consume the attempt.
-            //  - if attempts remain → next attempt (pronounce again + listen)
-            //  - if none remain → advance
             if (isLastAttempt) {
-              // Record the failure ONLY for auto-study + repeat-after-me.
               if (settingsRef.current.repeatAfterMe && isStudyingRef.current) {
                 failedCardsRef.current.push({
                   word: expected,
@@ -1066,17 +1087,13 @@ const App = () => {
           const isLastAttempt = attemptIndex + 1 >= totalAttempts;
 
           if (settingsRef.current.repeatOnWordsNotEqual) {
-            // CHECKED: do NOT consume the attempt. Re-pronounce + listen again
-            // on the SAME attempt index.
             speakOneAndListen(word, attemptIndex, totalAttempts);
           } else {
-            // UNCHECKED: consume the attempt.
             if (isLastAttempt) {
-              // Record the failure ONLY for auto-study + repeat-after-me.
               if (settingsRef.current.repeatAfterMe && isStudyingRef.current) {
                 failedCardsRef.current.push({
                   word,
-                  heard: '', // silence: nothing was heard
+                  heard: '',
                 });
               }
               setRepeatStatus('');
@@ -1102,6 +1119,7 @@ const App = () => {
   const handleOpenSettingsFile = () => { if (settingsFileInputRef.current) settingsFileInputRef.current.click(); };
 
   const SETTINGS_SCHEMA = {
+    autoAlign: { type: 'boolean', default: true },
     topPanelWidth: { type: 'number', min: 300, max: 2000, default: 916 },
     cardWidth: { type: 'number', min: 150, max: 800, default: 400 },
     cardHeight: { type: 'number', min: 150, max: 800, default: 400 },
@@ -1451,12 +1469,10 @@ const App = () => {
     setDbLoaded(true);
     setDbFileName(importedData.name || sourceName);
 
-    // Stop any leftover pulse on both cards from a previous session/DB.
     setCardPulsing('singular', false);
     setCardPulsing('plural', false);
     setManualPulseCard(null);
 
-    // Reset the repeat-after-me failure list for the new DB.
     failedCardsRef.current = [];
   }, []);
 
@@ -1647,12 +1663,93 @@ const App = () => {
     !settings.showTranslation ? 'hide-translation' : '',
   ].filter(Boolean).join(' ');
 
+  // ---- Auto-align computation ----------------------------------
+  // Portrait / square: fill the viewport width (previous behavior).
+  // Landscape: inset cards row by 25px from left, right, bottom;
+  //            25px between top bar and cards row;
+  //            25px gap between the two cards;
+  //            both cards sized to fill the remaining space exactly.
+  const viewportW = displayInfo
+    ? (displayInfo.viewportClientWidth || displayInfo.viewportCssWidth || 0)
+    : 0;
+  const viewportH = displayInfo
+    ? (displayInfo.viewportClientHeight || displayInfo.viewportCssHeight || 0)
+    : 0;
+
+  const isLandscape =
+    displayInfo &&
+    displayInfo.viewportClientWidth > displayInfo.viewportClientHeight;
+
+  // Defaults: raw numeric settings (used when autoAlign is OFF).
+  let effectiveTopPanelWidth = settings.topPanelWidth;
+  let effectiveCardWidth = settings.cardWidth;
+  let effectiveCardHeight = settings.cardHeight;
+  let effectiveGap = settings.cardGap;
+  let landscapeInset = 0;     // left/right inset when landscape
+  let landscapeBottom = 0;    // bottom inset when landscape
+  let landscapeTopGap = 0;    // gap between top bar and cards when landscape
+
+  if (settings.autoAlign && viewportW > 0) {
+    if (isLandscape) {
+      // ---- LANDSCAPE auto-align ----
+      landscapeInset = LANDSCAPE_MARGIN;
+      landscapeBottom = LANDSCAPE_MARGIN;
+      landscapeTopGap = LANDSCAPE_TOP_GAP;
+      effectiveGap = LANDSCAPE_GAP;
+
+      // Full card row width available after left/right insets:
+      const rowWidth = viewportW - LANDSCAPE_MARGIN * 2;
+
+      // Top panel spans the same width as the cards row.
+      effectiveTopPanelWidth = Math.max(300, rowWidth);
+
+      // Two cards + one gap must fit the row.
+      const wFromRow = Math.floor(
+        (rowWidth - LANDSCAPE_GAP) / 2
+      );
+      effectiveCardWidth = Math.max(MIN_CARD_WIDTH, wFromRow);
+
+      // Height: viewport minus top bar minus top gap minus bottom inset.
+      const hAvail =
+        viewportH
+        - TOP_BAR_HEIGHT
+        - LANDSCAPE_TOP_GAP
+        - LANDSCAPE_MARGIN;
+      effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, Math.floor(hAvail));
+    } else {
+      // ---- PORTRAIT / square auto-align (previous behavior) ----
+      effectiveTopPanelWidth = Math.max(300, viewportW - AUTO_H_PADDING);
+
+      const maxCardWidthFromPanel = Math.floor(
+        (effectiveTopPanelWidth - settings.cardGap) / 2
+      );
+      effectiveCardWidth = Math.max(
+        MIN_CARD_WIDTH,
+        Math.min(settings.cardWidth, maxCardWidthFromPanel)
+      );
+
+      const HEADER_RESERVE = TOP_BAR_HEIGHT + 32;
+      const availableHeight = Math.max(MIN_CARD_HEIGHT, viewportH - HEADER_RESERVE);
+      effectiveCardHeight = Math.max(
+        MIN_CARD_HEIGHT,
+        Math.min(settings.cardHeight, availableHeight)
+      );
+
+      effectiveGap = settings.cardGap;
+    }
+  }
+
   const appStyle = {
-    '--top-panel-width': `${settings.topPanelWidth}px`,
-    '--card-width': `${settings.cardWidth}px`,
-    '--card-height': `${settings.cardHeight}px`,
-    '--card-gap': `${settings.cardGap}px`,
-    '--font-size': `${settings.fontSize}px`,
+    '--top-panel-width':     `${effectiveTopPanelWidth}px`,
+    '--card-width':          `${effectiveCardWidth}px`,
+    '--card-height':         `${effectiveCardHeight}px`,
+    '--card-gap':            `${effectiveGap}px`,
+    '--font-size':           `${settings.fontSize}px`,
+    '--viewport-width':      viewportW ? `${viewportW}px` : '100vw',
+    '--viewport-height':     viewportH ? `${viewportH}px` : '100vh',
+    '--landscape-inset':     `${landscapeInset}px`,
+    '--landscape-bottom':    `${landscapeBottom}px`,
+    '--landscape-top-gap':   `${landscapeTopGap}px`,
   };
 
   const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
@@ -1662,7 +1759,12 @@ const App = () => {
     (settings.repeatAfterMe && navRepeatActiveRef.current);
 
   return (
-    <div className={appClassName} style={appStyle}>
+    <div
+      className={appClassName}
+      style={appStyle}
+      data-orientation={isLandscape ? 'landscape' : 'portrait'}
+      data-auto-align={settings.autoAlign ? 'on' : 'off'}
+    >
       <div className="top-bar-wrapper">
         <div className="top-bar" role="banner">
           <div className="header-left">
@@ -1689,7 +1791,6 @@ const App = () => {
               </button>
             )}
 
-            {/* ✅ Status pill: always visible; acts as the Load lesson button */}
             <button
               type="button"
               className={`header-db-info header-db-info-button ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
@@ -1892,30 +1993,44 @@ const App = () => {
             <div className="settings-content">
               <div className="settings-section">
                 <h3>Card Appearance</h3>
-                <div className="setting-item">
-                  <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
-                  <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
-                    onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
-                    min="300" max="2000" step="10" />
+                <div className="setting-item checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.autoAlign}
+                      onChange={(e) => handleSettingChange('autoAlign', e.target.checked)}
+                    />
+                    Auto align elements
+                  </label>
                 </div>
-                <div className="setting-item">
-                  <label htmlFor="setting-cardWidth">Card Width (px):</label>
-                  <input id="setting-cardWidth" type="number" value={settings.cardWidth}
-                    onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
-                    min="150" max="800" step="10" />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="setting-cardHeight">Card Height (px):</label>
-                  <input id="setting-cardHeight" type="number" value={settings.cardHeight}
-                    onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
-                    min="150" max="800" step="10" />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="setting-cardGap">Gap between cards (px):</label>
-                  <input id="setting-cardGap" type="number" value={settings.cardGap}
-                    onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 50)}
-                    min="5" max="100" step="5" />
-                </div>
+                {!settings.autoAlign && (
+                  <>
+                    <div className="setting-item">
+                      <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
+                      <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
+                        onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
+                        min="300" max="2000" step="10" />
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-cardWidth">Card Width (px):</label>
+                      <input id="setting-cardWidth" type="number" value={settings.cardWidth}
+                        onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
+                        min="150" max="800" step="10" />
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-cardHeight">Card Height (px):</label>
+                      <input id="setting-cardHeight" type="number" value={settings.cardHeight}
+                        onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
+                        min="150" max="800" step="10" />
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-cardGap">Gap between cards (px):</label>
+                      <input id="setting-cardGap" type="number" value={settings.cardGap}
+                        onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 50)}
+                        min="5" max="100" step="5" />
+                    </div>
+                  </>
+                )}
                 <div className="setting-item">
                   <label htmlFor="setting-fontSize">Font Size (px):</label>
                   <input id="setting-fontSize" type="number" value={settings.fontSize}
@@ -2139,6 +2254,24 @@ const App = () => {
                       {displayInfo.screenOrientationType || 'n/a'}
                       {displayInfo.screenOrientationAngle != null ? ` · ${displayInfo.screenOrientationAngle}°` : ''}
                     </div>
+
+                    <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Effective layout</strong></div>
+                    <div>
+                      auto align: {settings.autoAlign ? 'ON' : 'OFF'}
+                      {' '}· orientation: {isLandscape ? 'landscape' : 'portrait'}
+                    </div>
+                    <div>
+                      top panel: {effectiveTopPanelWidth}px
+                      {' '}· card: {effectiveCardWidth}×{effectiveCardHeight}px
+                      {' '}· gap: {effectiveGap}px
+                    </div>
+                    {isLandscape && settings.autoAlign && (
+                      <div>
+                        inset: {landscapeInset}px (left/right)
+                        {' '}· top gap: {landscapeTopGap}px
+                        {' '}· bottom: {landscapeBottom}px
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

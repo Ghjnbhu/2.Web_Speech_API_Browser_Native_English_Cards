@@ -1,6 +1,8 @@
 /* App.css
    - Android media queries respect --card-width AND --card-height
    - SVG never covers word / transcription / translation
+   - FIXED: SVG wrapper now expands to fill the card in BOTH width and height
+            (previously capped at max-width: 260px which blocked horizontal growth)
    - Pulse animation does not shift layout (reserved transparent border)
    - Card hover only on hover-capable devices (no Android touch jitter)
    - Settings modal uses dvh + safe-area insets
@@ -11,7 +13,16 @@
    - Recognized-word chip soft-pulses while listening; flashes green when matched
    - Status pill is a clickable button that mirrors the Load DB action
    - FIXED: Settings button and Status pill button share the same height (32px)
-   - NEW: Top panel width is driven by --top-panel-width (set in JSX)
+   - FIXED: Top bar never wraps → its height stays constant regardless of width.
+   - NEW: "Auto align elements" checkbox (Settings → Card Appearance).
+     When ON (default):
+       • PORTRAIT / square: top bar & cards row fill the layout viewport.
+       • LANDSCAPE: cards row is inset 25px from left, right, and bottom;
+                    25px between the top bar and the cards row;
+                    25px gap between the two cards; both cards sized to
+                    fill the remaining space exactly.
+       Dimension fields are hidden.
+     When OFF: raw numeric settings are used as-is; dimension fields shown.
 */
 
 /* ============================================================
@@ -35,6 +46,10 @@ body.light { background: #f5f5f5; color: #333; }
   --card-height: 400px;
   --card-gap: 50px;
   --font-size: 32px;
+  --landscape-inset: 0px;
+  --landscape-bottom: 0px;
+  --landscape-top-gap: 0px;
+  --top-bar-height: 52px;
 }
 
 .hide-transcription .transcription { display: none; }
@@ -47,16 +62,19 @@ body.light { background: #f5f5f5; color: #333; }
 }
 
 /* ============================================================
-   HEADER
+   HEADER — never wraps, keeps constant height
    ============================================================ */
 .top-bar-wrapper {
-  width: var(--top-panel-width, 916px);
+  width: min(var(--top-panel-width, 916px), 100%);
+  max-width: 100%;
   margin: 0 auto;
+  padding: 0 12px;
+  box-sizing: border-box;
 }
 
 .top-bar {
   width: 100%;
-  min-height: 52px;
+  min-height: var(--top-bar-height, 52px);
   padding: 8px 12px;
   background: #484348a8;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -67,16 +85,17 @@ body.light { background: #f5f5f5; color: #333; }
   color: #fff;
   box-sizing: border-box;
   gap: 1rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .menu-button {
@@ -90,7 +109,6 @@ body.light { background: #f5f5f5; color: #333; }
   transition: background 0.3s ease;
   flex-shrink: 0;
 
-  /* Shared height for header buttons */
   height: 32px;
   box-sizing: border-box;
   display: inline-flex;
@@ -122,10 +140,6 @@ body.light { background: #f5f5f5; color: #333; }
   overflow: hidden;
 }
 
-/* ✅ Button reset for the clickable status pill.
-   The visual styling comes entirely from .header-db-info — this only
-   removes default browser button chrome so it renders like a pill.
-   Height is forced to match .menu-button. */
 .header-db-info-button {
   font: inherit;
   color: inherit;
@@ -134,7 +148,6 @@ body.light { background: #f5f5f5; color: #333; }
   appearance: none;
   -webkit-appearance: none;
 
-  /* Match the Settings (.menu-button) height */
   height: 32px;
   box-sizing: border-box;
   display: inline-flex;
@@ -144,7 +157,7 @@ body.light { background: #f5f5f5; color: #333; }
 
 .header-db-info-button:disabled {
   cursor: not-allowed;
-  background: transparent;   /* show the top bar through it → exact match */
+  background: transparent;
   border-color: transparent;
 }
 
@@ -158,8 +171,6 @@ body.light .header-db-info-button:disabled {
   outline-offset: 2px;
 }
 
-/* Subtle hover affordance on hover-capable devices only
-   (no sticky-hover on Android touch) */
 @media (hover: hover) {
   .header-db-info-button:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.3);
@@ -236,8 +247,6 @@ body.light .header-db-info.repeat-error     .db-info-repeat { background: rgba(2
 
 /* ============================================================
    RECOGNIZED WORD CHIP (repeat-after-me)
-   Shows ONLY the recognized word(s) — no icons, no labels.
-   Soft-pulses while listening; flashes green when matched.
    ============================================================ */
 .recognized-chip {
   display: inline-flex;
@@ -468,13 +477,35 @@ body.light .recognized-chip.recognized-error {
 /* ============================================================
    PAGE CONTENT + CARDS
    ============================================================ */
-.page-content { padding: 15px 0 16px; }
+.page-content {
+  padding: 15px 0 16px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cards-row {
+  width: min(var(--top-panel-width, 916px), 100%);
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--card-gap);
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
 
 .card {
   width: var(--card-width);
   height: var(--card-height);
+  min-width: 0;
   min-height: 0;
+  max-width: 100%;
   max-height: var(--card-height);
+  flex: 0 1 var(--card-width);
   background: #4f4949;
   border-radius: 12px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
@@ -495,15 +526,6 @@ body.light .recognized-chip.recognized-error {
     transform: translateY(-5px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
   }
-}
-
-.cards-row {
-  width: var(--top-panel-width, 916px);
-  margin: 0 auto;
-  display: flex;
-  flex-wrap: nowrap;
-  gap: var(--card-gap);
-  justify-content: center;
 }
 
 .card-content {
@@ -543,12 +565,14 @@ body.light .recognized-chip.recognized-error {
   white-space: nowrap;
 }
 
+/* ✅ SVG wrapper now fills the card in BOTH width and height.
+   The old max-width: min(260px, 100%) prevented horizontal growth. */
 .svg-wrapper {
   flex: 1 1 0;
   min-height: 40px;
   min-width: 0;
   max-height: 100%;
-  max-width: min(260px, 100%);
+  max-width: 100%;          /* ← expands with the card */
   width: 100%;
   height: auto;
   display: flex;
@@ -732,6 +756,11 @@ body.light .svg-wrapper.svg-bordered { border-color: #0078d4; }
 .setting-item input[type="number"]:focus {
   outline: none;
   border-color: #0078d4;
+}
+.setting-item input[type="number"]:disabled {
+  background: #2a2a2a;
+  color: #777;
+  cursor: not-allowed;
 }
 
 .setting-item.checkbox { display: flex; align-items: center; }
@@ -918,37 +947,25 @@ body.light .active-pulse {
    RESPONSIVE — Tablet and narrow desktop
    ============================================================ */
 @media (max-width: 960px) {
-  .top-bar-wrapper {
-    width: 90%;
-    max-width: var(--top-panel-width, 916px);
-  }
-
+  .top-bar-wrapper,
   .cards-row {
     width: 100%;
-    max-width: var(--top-panel-width, 916px);
-    flex-wrap: wrap;
-    padding-left: 12px;
-    padding-right: 12px;
-    box-sizing: border-box;
+    max-width: min(var(--top-panel-width, 916px), 100%);
   }
 
   .card {
     width: min(var(--card-width), 100%);
-    height: var(--card-height);
-    min-height: 0;
-    max-height: var(--card-height);
-    overflow: hidden;
+    max-width: 100%;
   }
 
   .top-bar {
-    flex-wrap: wrap;
-    height: auto;
+    flex-wrap: nowrap;
     gap: 0.5rem;
-    justify-content: flex-start;
+    justify-content: space-between;
   }
 
   .header-left {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
     min-width: 0;
     flex-wrap: nowrap;
     overflow: hidden;
@@ -964,8 +981,8 @@ body.light .active-pulse {
   .db-info-name { max-width: 80px; }
 
   .header-buttons {
-    order: 3;
-    width: 100%;
+    width: auto;
+    flex-shrink: 0;
     justify-content: flex-end;
   }
 
@@ -979,10 +996,7 @@ body.light .active-pulse {
 @media (max-width: 600px) {
   .card {
     width: min(var(--card-width), 100%);
-    height: var(--card-height);
-    min-height: 0;
-    max-height: var(--card-height);
-    overflow: hidden;
+    max-width: 100%;
   }
 
   .header-db-info {
@@ -1019,4 +1033,69 @@ body.light .active-pulse {
   .setting-item.radio-group { flex-direction: column; gap: 0.5rem; }
   .settings-footer { flex-direction: column; }
   .settings-cancel, .settings-save { width: 100%; }
+}
+
+/* ============================================================
+   ORIENTATION-AWARE AUTO-ALIGNMENT
+   Only applies while auto-align is ON (data-auto-align="on").
+   ============================================================ */
+
+/* ---- LANDSCAPE AUTO-ALIGN ----
+   25px inset from left, right, and bottom edges of the layout
+   viewport. 25px between the top bar and the cards row.
+   Gap between the two cards is 25px. */
+[data-auto-align="on"][data-orientation="landscape"] .top-bar-wrapper {
+  width: 100%;
+  max-width: 100%;
+  padding: 0 var(--landscape-inset, 25px);
+  box-sizing: border-box;
+}
+
+[data-auto-align="on"][data-orientation="landscape"] .top-bar {
+  border-radius: 0 0 10px 10px;
+}
+
+[data-auto-align="on"][data-orientation="landscape"] .page-content {
+  padding: var(--landscape-top-gap, 25px) 0 var(--landscape-bottom, 25px) 0;
+  box-sizing: border-box;
+}
+
+[data-auto-align="on"][data-orientation="landscape"] .cards-row {
+  width: 100%;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 0 var(--landscape-inset, 25px);
+  box-sizing: border-box;
+  gap: var(--card-gap);
+}
+
+[data-auto-align="on"][data-orientation="landscape"] .card {
+  flex: 1 1 0;
+  width: auto;
+  max-width: none;
+  height: var(--card-height);
+  max-height: var(--card-height);
+}
+
+/* ---- PORTRAIT AUTO-ALIGN ---- */
+[data-auto-align="on"][data-orientation="portrait"] .cards-row {
+  row-gap: calc(var(--card-gap) / 2);
+}
+
+/* When auto-align is OFF, honor the raw numeric settings as-is. */
+[data-auto-align="off"] .top-bar-wrapper {
+  width: var(--top-panel-width, 916px);
+  max-width: none;
+}
+[data-auto-align="off"] .cards-row {
+  width: var(--top-panel-width, 916px);
+  max-width: none;
+  flex-wrap: nowrap;
+}
+[data-auto-align="off"] .card {
+  width: var(--card-width);
+  flex: 0 0 var(--card-width);
+  max-width: none;
 }
