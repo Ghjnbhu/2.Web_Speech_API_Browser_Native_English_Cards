@@ -1,27 +1,26 @@
 /* App.css
    - Android media queries respect --card-width AND --card-height
    - SVG never covers word / transcription / translation
-   - FIXED: SVG wrapper now expands to fill the card in BOTH width and height
-            (previously capped at max-width: 260px which blocked horizontal growth)
+   - FIXED: SVG wrapper expands to fill the card in BOTH width and height
    - Pulse animation does not shift layout (reserved transparent border)
    - Card hover only on hover-capable devices (no Android touch jitter)
    - Settings modal uses dvh + safe-area insets
    - Global focus ring
    - Header button order is set purely by JSX
    - Recognized-word chip shows ONLY the recognized word(s)
-   - Recognized-word chip font is larger than the Stop button (16px desktop / 14px phone)
    - Recognized-word chip soft-pulses while listening; flashes green when matched
    - Status pill is a clickable button that mirrors the Load DB action
    - FIXED: Settings button and Status pill button share the same height (32px)
    - FIXED: Top bar never wraps → its height stays constant regardless of width.
-   - NEW: "Auto align elements" checkbox (Settings → Card Appearance).
-     When ON (default):
-       • PORTRAIT / square: top bar & cards row fill the layout viewport.
-       • LANDSCAPE: cards row is inset 25px from left, right, and bottom;
-                    25px between the top bar and the cards row;
-                    25px gap between the two cards; both cards sized to
-                    fill the remaining space exactly.
-       Dimension fields are hidden.
+   - NEW: "Auto align elements" checkbox.
+     When ON:
+       • LANDSCAPE: two cards side by side, 25px left/right inset,
+                    20px between top bar and cards, 20px between cards,
+                    20px between cards and bottom.
+       • PORTRAIT: each card on its OWN ROW (stacked vertically),
+                    20px between top bar and first card,
+                    20px between the two cards,
+                    20px between plural card and bottom.
      When OFF: raw numeric settings are used as-is; dimension fields shown.
 */
 
@@ -565,14 +564,13 @@ body.light .recognized-chip.recognized-error {
   white-space: nowrap;
 }
 
-/* ✅ SVG wrapper now fills the card in BOTH width and height.
-   The old max-width: min(260px, 100%) prevented horizontal growth. */
+/* SVG wrapper expands with the card in BOTH width and height */
 .svg-wrapper {
   flex: 1 1 0;
   min-height: 40px;
   min-width: 0;
   max-height: 100%;
-  max-width: 100%;          /* ← expands with the card */
+  max-width: 100%;
   width: 100%;
   height: auto;
   display: flex;
@@ -1040,10 +1038,11 @@ body.light .active-pulse {
    Only applies while auto-align is ON (data-auto-align="on").
    ============================================================ */
 
-/* ---- LANDSCAPE AUTO-ALIGN ----
-   25px inset from left, right, and bottom edges of the layout
-   viewport. 25px between the top bar and the cards row.
-   Gap between the two cards is 25px. */
+/* ---- LANDSCAPE: two cards side by side ----
+   25px inset left/right.
+   20px between top bar and cards.
+   20px between the two cards.
+   20px between cards and bottom edge. */
 [data-auto-align="on"][data-orientation="landscape"] .top-bar-wrapper {
   width: 100%;
   max-width: 100%;
@@ -1056,7 +1055,7 @@ body.light .active-pulse {
 }
 
 [data-auto-align="on"][data-orientation="landscape"] .page-content {
-  padding: var(--landscape-top-gap, 25px) 0 var(--landscape-bottom, 25px) 0;
+  padding: var(--landscape-top-gap, 20px) 0 var(--landscape-bottom, 20px) 0;
   box-sizing: border-box;
 }
 
@@ -1079,9 +1078,33 @@ body.light .active-pulse {
   max-height: var(--card-height);
 }
 
-/* ---- PORTRAIT AUTO-ALIGN ---- */
+/* ---- PORTRAIT: each card on its OWN ROW (stacked) ----
+   20px between top bar and first (singular) card.
+   20px between singular card and plural card.
+   20px between plural card and bottom edge. */
+[data-auto-align="on"][data-orientation="portrait"] .page-content {
+  padding: var(--landscape-top-gap, 20px) 0 var(--landscape-bottom, 20px) 0;
+  box-sizing: border-box;
+}
+
 [data-auto-align="on"][data-orientation="portrait"] .cards-row {
-  row-gap: calc(var(--card-gap) / 2);
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--card-gap);       /* 20px between the two stacked cards */
+  width: 100%;
+  max-width: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+[data-auto-align="on"][data-orientation="portrait"] .card {
+  flex: 0 0 auto;
+  width: min(var(--card-width), 100%);
+  max-width: 100%;
+  height: var(--card-height);
+  max-height: var(--card-height);
 }
 
 /* When auto-align is OFF, honor the raw numeric settings as-is. */

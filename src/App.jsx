@@ -36,10 +36,16 @@
 //                 Report line format: `N. word - "recognized"` (or `N. word -`).
 // App.jsx - NEW: "Auto align elements" checkbox (Settings → Card Appearance).
 //                 Checked (default):
-//                   • Gap top bar → cards      = 20px (both orientations)
-//                   • Gap cards → bottom edge  = 20px (both orientations)
-//                   • Gap between the two cards = 20px (both orientations)
-//                   • Landscape only: 25px inset from left and right edges.
+//                   • LANDSCAPE: two cards side by side.
+//                       – 25px inset from left and right edges.
+//                       – 20px between top bar and cards.
+//                       – 20px between the two cards.
+//                       – 20px between cards and bottom edge.
+//                   • PORTRAIT: each card on its OWN ROW.
+//                       – 20px between top bar and first (singular) card.
+//                       – 20px between singular card and plural card.
+//                       – 20px between plural card and bottom edge.
+//                   • All gaps adjust automatically on orientation change.
 //                   Dimension fields are hidden.
 //                 Unchecked: raw numeric settings are used as-is; dimension
 //                   fields are shown.
@@ -59,12 +65,10 @@ const MIN_CARD_WIDTH   = 180;
 const MIN_CARD_HEIGHT  = 180;
 
 // Auto-align gaps (used when auto-align is ON)
-const AUTO_ALIGN_GAP         = 20;   // top bar → cards, cards → bottom, and between cards
+const AUTO_ALIGN_GAP         = 20;   // gaps everywhere: top, between cards, bottom
 const AUTO_ALIGN_SIDE_INSET  = 25;   // landscape only: left/right inset
 
-// Landscape geometry (only left/right inset uses 25px now)
-const LANDSCAPE_MARGIN  = AUTO_ALIGN_SIDE_INSET;  // 25px left/right
-const TOP_BAR_HEIGHT    = 52;                     // must match --top-bar-height in App.css
+const TOP_BAR_HEIGHT = 52;   // must match --top-bar-height in App.css
 
 // =============================================================
 // Utilities
@@ -1665,10 +1669,15 @@ const App = () => {
 
   // ---- Auto-align computation ----------------------------------
   // When autoAlign is ON:
-  //   • Gap top bar → cards      = 20px (both orientations)
-  //   • Gap cards → bottom edge  = 20px (both orientations)
-  //   • Gap between the two cards = 20px (both orientations)
-  //   • Landscape only: 25px inset from left and right edges.
+  //   • LANDSCAPE: two cards side by side.
+  //       – 25px inset from left and right edges.
+  //       – 20px between top bar and cards.
+  //       – 20px between the two cards.
+  //       – 20px between cards and bottom edge.
+  //   • PORTRAIT: each card on its OWN ROW (stacked vertically).
+  //       – 20px between top bar and first (singular) card.
+  //       – 20px between singular card and plural card.
+  //       – 20px between plural card and bottom edge.
   // When autoAlign is OFF: raw numeric settings are used as-is.
   const viewportW = displayInfo
     ? (displayInfo.viewportClientWidth || displayInfo.viewportCssWidth || 0)
@@ -1691,14 +1700,13 @@ const App = () => {
   let bottomGap = 0;          // cards → bottom edge
 
   if (settings.autoAlign && viewportW > 0) {
-    // Auto-align ON: both card-to-card gap and card-to-topbar/bottom gaps = 20px.
     effectiveGap = AUTO_ALIGN_GAP;
     topGap = AUTO_ALIGN_GAP;
     bottomGap = AUTO_ALIGN_GAP;
 
     if (isLandscape) {
-      // ---- LANDSCAPE auto-align ----
-      sideInset = LANDSCAPE_MARGIN;   // 25px left/right
+      // ---- LANDSCAPE: two cards side by side ----
+      sideInset = AUTO_ALIGN_SIDE_INSET;   // 25px left/right
 
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
@@ -1706,33 +1714,34 @@ const App = () => {
       const wFromRow = Math.floor((rowWidth - AUTO_ALIGN_GAP) / 2);
       effectiveCardWidth = Math.max(MIN_CARD_WIDTH, wFromRow);
 
+      // height: viewport − top bar − top gap − bottom gap
       const hAvail =
-        viewportH
-        - TOP_BAR_HEIGHT
-        - AUTO_ALIGN_GAP       // top bar → cards
-        - AUTO_ALIGN_GAP;      // cards → bottom
+        viewportH - TOP_BAR_HEIGHT - AUTO_ALIGN_GAP - AUTO_ALIGN_GAP;
       effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, Math.floor(hAvail));
     } else {
-      // ---- PORTRAIT / square auto-align ----
+      // ---- PORTRAIT: each card on its own row ----
+      // Horizontal: cards take the full width minus small padding.
       effectiveTopPanelWidth = Math.max(300, viewportW - AUTO_H_PADDING);
-
-      const maxCardWidthFromPanel = Math.floor(
-        (effectiveTopPanelWidth - AUTO_ALIGN_GAP) / 2
-      );
       effectiveCardWidth = Math.max(
         MIN_CARD_WIDTH,
-        Math.min(settings.cardWidth, maxCardWidthFromPanel)
+        Math.min(
+          settings.cardWidth,
+          effectiveTopPanelWidth - 2 * 12   // 12px padding each side of cards-row
+        )
       );
 
+      // Vertical: two stacked cards + two 20px gaps between the three regions
+      //   top bar → card1: 20px
+      //   card1  → card2 : 20px
+      //   card2  → bottom: 20px
       const hAvail =
         viewportH
         - TOP_BAR_HEIGHT
-        - AUTO_ALIGN_GAP      // top bar → cards
-        - AUTO_ALIGN_GAP;     // cards → bottom
-      effectiveCardHeight = Math.max(
-        MIN_CARD_HEIGHT,
-        Math.min(settings.cardHeight, hAvail)
-      );
+        - AUTO_ALIGN_GAP   // top bar → card1
+        - AUTO_ALIGN_GAP   // card1  → card2
+        - AUTO_ALIGN_GAP;  // card2  → bottom
+      const hPerCard = Math.floor(hAvail / 2);
+      effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, hPerCard);
     }
   }
 
