@@ -20,9 +20,11 @@
                     20px between top bar and cards, 20px between cards,
                     20px between cards and bottom.
        • PORTRAIT: each card on its OWN ROW (stacked vertically),
-                    20px between top bar and first card,
-                    20px between the two cards,
-                    20px between plural card and bottom.
+                    15px between top bar and first card,
+                    15px between the two cards,
+                    15px between plural card and bottom edge.
+                    Card height is derived from the actual measured top-bar
+                    height so both cards exactly fill the remaining space.
      When OFF: raw numeric settings are used as-is; dimension fields shown.
 */
 
@@ -50,6 +52,7 @@ body.light { background: #f5f5f5; color: #333; }
   --landscape-inset: 0px;
   --landscape-bottom: 0px;
   --landscape-top-gap: 0px;
+  --measured-top-bar-height: 52px;
   --top-bar-height: 52px;
 }
 
@@ -63,7 +66,7 @@ body.light { background: #f5f5f5; color: #333; }
 }
 
 /* ============================================================
-   HEADER — single row by default (landscape)
+   HEADER — single row by default
    ============================================================ */
 .top-bar-wrapper {
   width: min(var(--top-panel-width, 916px), 100%);
@@ -566,7 +569,6 @@ body.light .recognized-chip.recognized-error {
   white-space: nowrap;
 }
 
-/* SVG wrapper expands with the card in BOTH width and height */
 .svg-wrapper {
   flex: 1 1 0;
   min-height: 40px;
@@ -1049,20 +1051,19 @@ body.light .active-pulse {
   justify-content: space-between;
   gap: 0.5rem;
   height: auto;
+  min-height: 0;
   padding: 8px 12px;
 }
 
-/* Force header-left to take the whole first row */
 [data-auto-align="on"][data-orientation="portrait"] .top-bar .header-left {
   flex: 1 1 100%;
   width: 100%;
   min-width: 0;
-  flex-wrap: wrap;               /* allow its own children to wrap if needed */
+  flex-wrap: wrap;
   gap: 0.5rem;
   overflow: visible;
 }
 
-/* Header buttons (nav + start/stop) on the first row, right-aligned */
 [data-auto-align="on"][data-orientation="portrait"] .top-bar .header-buttons {
   flex: 0 0 auto;
   order: 2;
@@ -1070,7 +1071,6 @@ body.light .active-pulse {
   gap: 0.4rem;
 }
 
-/* Push the status pill to its own row below */
 [data-auto-align="on"][data-orientation="portrait"] .top-bar .header-db-info-button {
   order: 3;
   flex: 1 1 100%;
@@ -1082,12 +1082,11 @@ body.light .active-pulse {
   box-sizing: border-box;
 }
 
-/* Status pill can be wider on its own row */
 [data-auto-align="on"][data-orientation="portrait"] .top-bar .header-db-info-button .db-info-name {
   max-width: none;
 }
 
-/* ---- LANDSCAPE: two cards side by side (unchanged) ---- */
+/* ---- LANDSCAPE: single-row top bar, two cards side by side ---- */
 [data-auto-align="on"][data-orientation="landscape"] .top-bar-wrapper {
   width: 100%;
   max-width: 100%;
@@ -1097,6 +1096,9 @@ body.light .active-pulse {
 
 [data-auto-align="on"][data-orientation="landscape"] .top-bar {
   border-radius: 0 0 10px 10px;
+  flex-wrap: nowrap;
+  height: auto;
+  min-height: var(--top-bar-height, 52px);
 }
 
 [data-auto-align="on"][data-orientation="landscape"] .page-content {
@@ -1123,12 +1125,12 @@ body.light .active-pulse {
   max-height: var(--card-height);
 }
 
-/* ---- PORTRAIT: each card on its OWN ROW (stacked) ----
-   20px between top bar and first (singular) card.
-   20px between singular card and plural card.
-   20px between plural card and bottom edge. */
+/* ---- PORTRAIT: cards on their own rows ----
+   15px between top bar and first (singular) card.
+   15px between singular card and plural card.
+   15px between plural card and bottom edge. */
 [data-auto-align="on"][data-orientation="portrait"] .page-content {
-  padding: var(--landscape-top-gap, 20px) 0 var(--landscape-bottom, 20px) 0;
+  padding: var(--landscape-top-gap, 15px) 0 var(--landscape-bottom, 15px) 0;
   box-sizing: border-box;
 }
 
@@ -1137,7 +1139,7 @@ body.light .active-pulse {
   flex-wrap: nowrap;
   justify-content: flex-start;
   align-items: center;
-  gap: var(--card-gap);       /* 20px between the two stacked cards */
+  gap: var(--card-gap);       /* 15px between the two stacked cards */
   width: 100%;
   max-width: 100%;
   padding: 0 12px;

@@ -34,21 +34,20 @@
 // App.jsx - NEW: In Auto Study + Repeat-after-me, track cards that failed all
 //                 attempts and report them at session completion.
 //                 Report line format: `N. word - "recognized"` (or `N. word -`).
-// App.jsx - NEW: "Auto align elements" checkbox (Settings → Card Appearance).
-//                 Checked (default):
-//                   • LANDSCAPE: two cards side by side.
-//                       – 25px inset from left and right edges.
-//                       – 20px between top bar and cards.
-//                       – 20px between the two cards.
-//                       – 20px between cards and bottom edge.
-//                   • PORTRAIT: each card on its OWN ROW.
-//                       – 20px between top bar and first (singular) card.
-//                       – 20px between singular card and plural card.
-//                       – 20px between plural card and bottom edge.
-//                   • All gaps adjust automatically on orientation change.
-//                   Dimension fields are hidden.
-//                 Unchecked: raw numeric settings are used as-is; dimension
-//                   fields are shown.
+// App.jsx - NEW: "Auto align elements" checkbox.
+//   When ON:
+//     • LANDSCAPE: two cards side by side.
+//         – 25px inset from left and right edges.
+//         – 20px between top bar and cards.
+//         – 20px between the two cards.
+//         – 20px between cards and bottom edge.
+//     • PORTRAIT: each card on its OWN ROW (stacked).
+//         – 15px between top bar and first (singular) card.
+//         – 15px between singular card and plural card.
+//         – 15px between plural card and bottom edge.
+//         – Card height is computed from the ACTUAL measured height of the
+//           top bar (which is two rows in portrait), via a ResizeObserver.
+//   When OFF: raw numeric settings are used as-is; dimension fields shown.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -60,15 +59,18 @@ import './App.css';
 const LESSONS_INDEX_URL = '/lessons/index.json';
 
 // Auto-align constants
-const AUTO_H_PADDING   = 24;   // portrait: total horizontal padding
-const MIN_CARD_WIDTH   = 180;
-const MIN_CARD_HEIGHT  = 180;
+const AUTO_H_PADDING  = 24;   // portrait: total horizontal padding
+const MIN_CARD_WIDTH  = 180;
+const MIN_CARD_HEIGHT = 180;
 
-// Auto-align gaps (used when auto-align is ON)
-const AUTO_ALIGN_GAP         = 20;   // gaps everywhere: top, between cards, bottom
-const AUTO_ALIGN_SIDE_INSET  = 25;   // landscape only: left/right inset
+// Auto-align gaps
+const AUTO_ALIGN_GAP_LANDSCAPE = 20;   // landscape: top → cards, cards → bottom, between cards
+const AUTO_ALIGN_GAP_PORTRAIT  = 15;   // portrait: top → cards, cards → bottom, between cards
+const AUTO_ALIGN_SIDE_INSET    = 25;   // landscape only: left/right inset
 
-const TOP_BAR_HEIGHT = 52;   // must match --top-bar-height in App.css
+// Fallback top bar heights (used only until the observer reports a real value)
+const TOP_BAR_HEIGHT_LANDSCAPE = 52;
+const TOP_BAR_HEIGHT_PORTRAIT  = 96;   // two rows (row1 + row2)
 
 // =============================================================
 // Utilities
@@ -206,6 +208,9 @@ const App = () => {
   const [lessonsListError, setLessonsListError] = useState('');
   const [isLoadingLessonsList, setIsLoadingLessonsList] = useState(false);
 
+  // Measured height of the rendered top bar (updated via ResizeObserver).
+  const [measuredTopBarHeight, setMeasuredTopBarHeight] = useState(null);
+
   const displayInfo = useDisplayInfo();
 
   const [settings, setSettings] = useState({
@@ -282,6 +287,9 @@ const App = () => {
   const pronounceAndMaybeListenRef = useRef(null);
   const finishNavRepeatRef = useRef(null);
 
+  // Ref to the top bar DOM node so we can measure it.
+  const topBarRef = useRef(null);
+
   const {
     transcript,
     listening,
@@ -307,6 +315,40 @@ const App = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       synthRef.current = window.speechSynthesis;
     }
+  }, []);
+
+  // ---- Measure the actual rendered height of the top bar ----
+  useEffect(() => {
+    const node = topBarRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      // Fallback: measure on resize only.
+      const measure = () => {
+        if (topBarRef.current) {
+          setMeasuredTopBarHeight(topBarRef.current.offsetHeight);
+        }
+      };
+      measure();
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+
+    const measure = () => {
+      // Use getBoundingClientRect to include padding + border exactly as rendered.
+      const h = node.getBoundingClientRect().height;
+      setMeasuredTopBarHeight(h);
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(node);
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
   }, []);
 
   useEffect(() => {
@@ -1674,10 +1716,12 @@ const App = () => {
   //       – 20px between top bar and cards.
   //       – 20px between the two cards.
   //       – 20px between cards and bottom edge.
-  //   • PORTRAIT: each card on its OWN ROW (stacked vertically).
-  //       – 20px between top bar and first (singular) card.
-  //       – 20px between singular card and plural card.
-  //       – 20px between plural card and bottom edge.
+  //   • PORTRAIT: each card on its OWN ROW (stacked).
+  //       – 15px between top bar and first card.
+  //       – 15px between the two cards.
+  //       – 15px between plural card and bottom edge.
+  //       – Card height is derived from the ACTUAL measured top-bar height,
+  //         so it stays correct whether the top bar is one row or two.
   // When autoAlign is OFF: raw numeric settings are used as-is.
   const viewportW = displayInfo
     ? (displayInfo.viewportClientWidth || displayInfo.viewportCssWidth || 0)
@@ -1690,6 +1734,16 @@ const App = () => {
     displayInfo &&
     displayInfo.viewportClientWidth > displayInfo.viewportClientHeight;
 
+  // Effective top bar height: prefer the measured value; fall back to a
+  // sensible constant until the ResizeObserver reports one.
+  const fallbackTopBarHeight = isLandscape
+    ? TOP_BAR_HEIGHT_LANDSCAPE
+    : TOP_BAR_HEIGHT_PORTRAIT;
+  const effectiveTopBarHeight =
+    (measuredTopBarHeight && measuredTopBarHeight > 0)
+      ? measuredTopBarHeight
+      : fallbackTopBarHeight;
+
   // Defaults: raw numeric settings (used when autoAlign is OFF).
   let effectiveTopPanelWidth = settings.topPanelWidth;
   let effectiveCardWidth = settings.cardWidth;
@@ -1700,27 +1754,28 @@ const App = () => {
   let bottomGap = 0;          // cards → bottom edge
 
   if (settings.autoAlign && viewportW > 0) {
-    effectiveGap = AUTO_ALIGN_GAP;
-    topGap = AUTO_ALIGN_GAP;
-    bottomGap = AUTO_ALIGN_GAP;
-
     if (isLandscape) {
-      // ---- LANDSCAPE: two cards side by side ----
-      sideInset = AUTO_ALIGN_SIDE_INSET;   // 25px left/right
+      // ---- LANDSCAPE ----
+      effectiveGap = AUTO_ALIGN_GAP_LANDSCAPE;
+      topGap = AUTO_ALIGN_GAP_LANDSCAPE;
+      bottomGap = AUTO_ALIGN_GAP_LANDSCAPE;
+      sideInset = AUTO_ALIGN_SIDE_INSET;
 
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
 
-      const wFromRow = Math.floor((rowWidth - AUTO_ALIGN_GAP) / 2);
+      const wFromRow = Math.floor((rowWidth - effectiveGap) / 2);
       effectiveCardWidth = Math.max(MIN_CARD_WIDTH, wFromRow);
 
-      // height: viewport − top bar − top gap − bottom gap
       const hAvail =
-        viewportH - TOP_BAR_HEIGHT - AUTO_ALIGN_GAP - AUTO_ALIGN_GAP;
+        viewportH - effectiveTopBarHeight - topGap - bottomGap;
       effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, Math.floor(hAvail));
     } else {
-      // ---- PORTRAIT: each card on its own row ----
-      // Horizontal: cards take the full width minus small padding.
+      // ---- PORTRAIT ----
+      effectiveGap = AUTO_ALIGN_GAP_PORTRAIT;
+      topGap = AUTO_ALIGN_GAP_PORTRAIT;
+      bottomGap = AUTO_ALIGN_GAP_PORTRAIT;
+
       effectiveTopPanelWidth = Math.max(300, viewportW - AUTO_H_PADDING);
       effectiveCardWidth = Math.max(
         MIN_CARD_WIDTH,
@@ -1730,16 +1785,13 @@ const App = () => {
         )
       );
 
-      // Vertical: two stacked cards + two 20px gaps between the three regions
-      //   top bar → card1: 20px
-      //   card1  → card2 : 20px
-      //   card2  → bottom: 20px
+      // Two stacked cards + three gaps fill the remaining vertical space.
       const hAvail =
         viewportH
-        - TOP_BAR_HEIGHT
-        - AUTO_ALIGN_GAP   // top bar → card1
-        - AUTO_ALIGN_GAP   // card1  → card2
-        - AUTO_ALIGN_GAP;  // card2  → bottom
+        - effectiveTopBarHeight   // ← dynamic: whatever the top bar actually is
+        - topGap
+        - effectiveGap            // between the two cards
+        - bottomGap;
       const hPerCard = Math.floor(hAvail / 2);
       effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, hPerCard);
     }
@@ -1756,6 +1808,8 @@ const App = () => {
     '--landscape-inset':     `${sideInset}px`,
     '--landscape-bottom':    `${bottomGap}px`,
     '--landscape-top-gap':   `${topGap}px`,
+    // Expose the measured top bar height so CSS can use it if needed.
+    '--measured-top-bar-height': `${effectiveTopBarHeight}px`,
   };
 
   const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
@@ -1772,7 +1826,7 @@ const App = () => {
       data-auto-align={settings.autoAlign ? 'on' : 'off'}
     >
       <div className="top-bar-wrapper">
-        <div className="top-bar" role="banner">
+        <div className="top-bar" role="banner" ref={topBarRef}>
           <div className="header-left">
             <button
               onClick={toggleTheme}
@@ -2267,8 +2321,11 @@ const App = () => {
                       {' '}· orientation: {isLandscape ? 'landscape' : 'portrait'}
                     </div>
                     <div>
-                      top panel: {effectiveTopPanelWidth}px
-                      {' '}· card: {effectiveCardWidth}×{effectiveCardHeight}px
+                      top bar (measured): {Math.round(effectiveTopBarHeight)}px
+                      {' '}· top panel: {effectiveTopPanelWidth}px
+                    </div>
+                    <div>
+                      card: {effectiveCardWidth}×{effectiveCardHeight}px
                       {' '}· gap between cards: {effectiveGap}px
                     </div>
                     {settings.autoAlign && (
