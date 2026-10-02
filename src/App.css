@@ -11,7 +11,9 @@
    - Recognized-word chip soft-pulses while listening; flashes green when matched
    - Status pill is a clickable button that mirrors the Load DB action
    - FIXED: Settings button and Status pill button share the same height (32px)
-   - FIXED: Top bar never wraps → its height stays constant regardless of width.
+   - FIXED: Top bar height depends on orientation:
+       • LANDSCAPE: single row.
+       • PORTRAIT (auto-align ON): two rows — controls on top, status pill below.
    - NEW: "Auto align elements" checkbox.
      When ON:
        • LANDSCAPE: two cards side by side, 25px left/right inset,
@@ -61,7 +63,7 @@ body.light { background: #f5f5f5; color: #333; }
 }
 
 /* ============================================================
-   HEADER — never wraps, keeps constant height
+   HEADER — single row by default (landscape)
    ============================================================ */
 .top-bar-wrapper {
   width: min(var(--top-panel-width, 916px), 100%);
@@ -1038,11 +1040,54 @@ body.light .active-pulse {
    Only applies while auto-align is ON (data-auto-align="on").
    ============================================================ */
 
-/* ---- LANDSCAPE: two cards side by side ----
-   25px inset left/right.
-   20px between top bar and cards.
-   20px between the two cards.
-   20px between cards and bottom edge. */
+/* ---- PORTRAIT: TWO-ROW TOP BAR ----
+   Row 1: theme + title + settings + nav + start/stop (and chip).
+   Row 2: status pill (Load lesson / DB info). */
+[data-auto-align="on"][data-orientation="portrait"] .top-bar {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: auto;
+  padding: 8px 12px;
+}
+
+/* Force header-left to take the whole first row */
+[data-auto-align="on"][data-orientation="portrait"] .top-bar .header-left {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;               /* allow its own children to wrap if needed */
+  gap: 0.5rem;
+  overflow: visible;
+}
+
+/* Header buttons (nav + start/stop) on the first row, right-aligned */
+[data-auto-align="on"][data-orientation="portrait"] .top-bar .header-buttons {
+  flex: 0 0 auto;
+  order: 2;
+  margin-left: auto;
+  gap: 0.4rem;
+}
+
+/* Push the status pill to its own row below */
+[data-auto-align="on"][data-orientation="portrait"] .top-bar .header-db-info-button {
+  order: 3;
+  flex: 1 1 100%;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  margin-top: 0.35rem;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+
+/* Status pill can be wider on its own row */
+[data-auto-align="on"][data-orientation="portrait"] .top-bar .header-db-info-button .db-info-name {
+  max-width: none;
+}
+
+/* ---- LANDSCAPE: two cards side by side (unchanged) ---- */
 [data-auto-align="on"][data-orientation="landscape"] .top-bar-wrapper {
   width: 100%;
   max-width: 100%;
