@@ -11,6 +11,7 @@
    - Recognized-word chip soft-pulses while listening; flashes green when matched
    - Status pill is a clickable button that mirrors the Load DB action
    - FIXED: Settings button and Status pill button share the same height (32px)
+   - NEW: Top panel width is driven by --top-panel-width (set in JSX)
 */
 
 /* ============================================================
@@ -29,6 +30,7 @@ body.light { background: #f5f5f5; color: #333; }
    CSS VARIABLES
    ============================================================ */
 .app {
+  --top-panel-width: 916px;
   --card-width: 400px;
   --card-height: 400px;
   --card-gap: 50px;
@@ -48,7 +50,7 @@ body.light { background: #f5f5f5; color: #333; }
    HEADER
    ============================================================ */
 .top-bar-wrapper {
-  width: 916px;
+  width: var(--top-panel-width, 916px);
   margin: 0 auto;
 }
 
@@ -496,7 +498,7 @@ body.light .recognized-chip.recognized-error {
 }
 
 .cards-row {
-  width: 916px;
+  width: var(--top-panel-width, 916px);
   margin: 0 auto;
   display: flex;
   flex-wrap: nowrap;
@@ -916,12 +918,15 @@ body.light .active-pulse {
    RESPONSIVE — Tablet and narrow desktop
    ============================================================ */
 @media (max-width: 960px) {
-  .top-bar-wrapper { width: 90%; }
+  .top-bar-wrapper {
+    width: 90%;
+    max-width: var(--top-panel-width, 916px);
+  }
 
   .cards-row {
     width: 100%;
+    max-width: var(--top-panel-width, 916px);
     flex-wrap: wrap;
-    max-width: 916px;
     padding-left: 12px;
     padding-right: 12px;
     box-sizing: border-box;

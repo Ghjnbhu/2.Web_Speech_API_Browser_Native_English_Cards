@@ -34,6 +34,7 @@
 // App.jsx - NEW: In Auto Study + Repeat-after-me, track cards that failed all
 //                 attempts and report them at session completion.
 //                 Report line format: `N. word - "recognized"` (or `N. word -`).
+// App.jsx - NEW: "Top panel width (px)" setting controls top bar + cards row width.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -176,6 +177,7 @@ const App = () => {
   const displayInfo = useDisplayInfo();
 
   const [settings, setSettings] = useState({
+    topPanelWidth: 916,
     cardWidth: 400,
     cardHeight: 400,
     cardGap: 50,
@@ -1100,6 +1102,7 @@ const App = () => {
   const handleOpenSettingsFile = () => { if (settingsFileInputRef.current) settingsFileInputRef.current.click(); };
 
   const SETTINGS_SCHEMA = {
+    topPanelWidth: { type: 'number', min: 300, max: 2000, default: 916 },
     cardWidth: { type: 'number', min: 150, max: 800, default: 400 },
     cardHeight: { type: 'number', min: 150, max: 800, default: 400 },
     cardGap: { type: 'number', min: 5, max: 100, default: 50 },
@@ -1645,6 +1648,7 @@ const App = () => {
   ].filter(Boolean).join(' ');
 
   const appStyle = {
+    '--top-panel-width': `${settings.topPanelWidth}px`,
     '--card-width': `${settings.cardWidth}px`,
     '--card-height': `${settings.cardHeight}px`,
     '--card-gap': `${settings.cardGap}px`,
@@ -1888,6 +1892,12 @@ const App = () => {
             <div className="settings-content">
               <div className="settings-section">
                 <h3>Card Appearance</h3>
+                <div className="setting-item">
+                  <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
+                  <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
+                    onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
+                    min="300" max="2000" step="10" />
+                </div>
                 <div className="setting-item">
                   <label htmlFor="setting-cardWidth">Card Width (px):</label>
                   <input id="setting-cardWidth" type="number" value={settings.cardWidth}
