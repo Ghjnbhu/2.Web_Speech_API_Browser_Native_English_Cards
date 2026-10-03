@@ -16,16 +16,24 @@
        • PORTRAIT (auto-align ON): two rows — controls on top, status pill below.
    - NEW: "Auto align elements" checkbox.
      When ON:
-       • LANDSCAPE: two cards side by side, 25px left/right inset,
-                    20px between top bar and cards, 20px between cards,
-                    20px between cards and bottom.
-       • PORTRAIT: each card on its OWN ROW (stacked vertically),
-                    15px between top bar and first card,
-                    15px between the two cards,
-                    15px between plural card and bottom edge.
-                    Card height is derived from the actual measured top-bar
-                    height so both cards exactly fill the remaining space.
-     When OFF: raw numeric settings are used as-is; dimension fields shown.
+       • The "Gap between cards (px)" field REMAINS VISIBLE.
+         Its default value is 10px.
+         It represents ALL paddings around the cards:
+           – top bar → cards
+           – cards → bottom
+           – between the two cards
+           – left/right inset of the cards row
+       • LANDSCAPE: two cards side by side.
+       • PORTRAIT: each card on its OWN ROW (stacked).
+         Card height is derived from the ACTUAL measured top-bar height,
+         so both cards exactly fill the remaining space.
+     When OFF: raw numeric settings are used as-is.
+   - FIXED: In portrait auto-align, the cards-row horizontal padding now uses
+            --card-gap instead of a hardcoded 12px, so the left/right inset
+            matches the top/bottom/gap value.
+   - FIXED: .top-bar box-shadow removed and replaced with a subtle bottom
+            border so the visible bottom edge of the bar ends exactly where
+            the auto-align gap begins (no visual "spill" into the gap).
 */
 
 /* ============================================================
@@ -81,7 +89,9 @@ body.light { background: #f5f5f5; color: #333; }
   min-height: var(--top-bar-height, 52px);
   padding: 8px 12px;
   background: #484348a8;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  /* FIXED: shadow removed so the visible bottom edge of the bar
+     ends exactly at the auto-align gap (no visual spill). */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -840,7 +850,7 @@ button.settings-ok:hover { transform: translateY(-1px); filter: brightness(1.05)
 body.light .top-bar {
   background: #ffffff;
   color: #333;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 body.light .header-title { color: #333; }
 
@@ -1126,11 +1136,13 @@ body.light .active-pulse {
 }
 
 /* ---- PORTRAIT: cards on their own rows ----
-   15px between top bar and first (singular) card.
-   15px between singular card and plural card.
-   15px between plural card and bottom edge. */
+   Gap top bar → cards:    var(--landscape-top-gap)  (= card-gap)
+   Gap between cards:      var(--card-gap)           (= card-gap)
+   Gap cards → bottom:     var(--landscape-bottom)   (= card-gap)
+   Left/right inset:       var(--card-gap)           (= card-gap)  ← FIXED
+*/
 [data-auto-align="on"][data-orientation="portrait"] .page-content {
-  padding: var(--landscape-top-gap, 15px) 0 var(--landscape-bottom, 15px) 0;
+  padding: var(--landscape-top-gap, 10px) 0 var(--landscape-bottom, 10px) 0;
   box-sizing: border-box;
 }
 
@@ -1139,10 +1151,10 @@ body.light .active-pulse {
   flex-wrap: nowrap;
   justify-content: flex-start;
   align-items: center;
-  gap: var(--card-gap);       /* 15px between the two stacked cards */
+  gap: var(--card-gap);                 /* gap between the two stacked cards */
   width: 100%;
   max-width: 100%;
-  padding: 0 12px;
+  padding: 0 var(--card-gap);           /* ← FIXED: uses the same gap for left/right */
   box-sizing: border-box;
 }
 

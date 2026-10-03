@@ -36,18 +36,23 @@
 //                 Report line format: `N. word - "recognized"` (or `N. word -`).
 // App.jsx - NEW: "Auto align elements" checkbox.
 //   When ON:
+//     • The "Gap between cards (px)" field REMAINS VISIBLE.
+//       Its default value is 10px.
+//       It represents ALL paddings around the cards:
+//         – top bar → cards
+//         – cards → bottom
+//         – between the two cards
+//         – left/right inset of the cards row
 //     • LANDSCAPE: two cards side by side.
-//         – 25px inset from left and right edges.
-//         – 20px between top bar and cards.
-//         – 20px between the two cards.
-//         – 20px between cards and bottom edge.
 //     • PORTRAIT: each card on its OWN ROW (stacked).
-//         – 15px between top bar and first (singular) card.
-//         – 15px between singular card and plural card.
-//         – 15px between plural card and bottom edge.
-//         – Card height is computed from the ACTUAL measured height of the
-//           top bar (which is two rows in portrait), via a ResizeObserver.
-//   When OFF: raw numeric settings are used as-is; dimension fields shown.
+//       Card height is derived from the ACTUAL measured top-bar height,
+//       so both cards exactly fill the remaining space.
+//   When OFF: raw numeric settings are used as-is.
+// App.jsx - NEW: When a Repeat-after-me session is active, the status pill
+//                 hides the DB filename and ID info so only the repeat
+//                 indicators (Listening / Matched / Retry / Repeat After Me)
+//                 remain visible.
+// App.jsx - RENAMED: "🎧 Repeat mode" → "🎧 Repeat After Me" in the pill.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -59,18 +64,13 @@ import './App.css';
 const LESSONS_INDEX_URL = '/lessons/index.json';
 
 // Auto-align constants
-const AUTO_H_PADDING  = 24;   // portrait: total horizontal padding
+const AUTO_H_PADDING  = 24;
 const MIN_CARD_WIDTH  = 180;
 const MIN_CARD_HEIGHT = 180;
 
-// Auto-align gaps
-const AUTO_ALIGN_GAP_LANDSCAPE = 20;   // landscape: top → cards, cards → bottom, between cards
-const AUTO_ALIGN_GAP_PORTRAIT  = 15;   // portrait: top → cards, cards → bottom, between cards
-const AUTO_ALIGN_SIDE_INSET    = 25;   // landscape only: left/right inset
-
 // Fallback top bar heights (used only until the observer reports a real value)
 const TOP_BAR_HEIGHT_LANDSCAPE = 52;
-const TOP_BAR_HEIGHT_PORTRAIT  = 96;   // two rows (row1 + row2)
+const TOP_BAR_HEIGHT_PORTRAIT  = 96;   // two rows
 
 // =============================================================
 // Utilities
@@ -208,8 +208,11 @@ const App = () => {
   const [lessonsListError, setLessonsListError] = useState('');
   const [isLoadingLessonsList, setIsLoadingLessonsList] = useState(false);
 
-  // Measured height of the rendered top bar (updated via ResizeObserver).
+  // Measured top bar height (updated via ResizeObserver).
   const [measuredTopBarHeight, setMeasuredTopBarHeight] = useState(null);
+
+  // Tracks whether nav-repeat mode is currently active (for UI mirroring).
+  const [navRepeatActive, setNavRepeatActive] = useState(false);
 
   const displayInfo = useDisplayInfo();
 
@@ -218,7 +221,7 @@ const App = () => {
     topPanelWidth: 916,
     cardWidth: 400,
     cardHeight: 400,
-    cardGap: 50,
+    cardGap: 10,               // ← default gap for auto-align: all paddings around cards
     showTranscription: true,
     showTranslation: true,
     loadLessonLocally: false,
@@ -321,7 +324,6 @@ const App = () => {
   useEffect(() => {
     const node = topBarRef.current;
     if (!node || typeof ResizeObserver === 'undefined') {
-      // Fallback: measure on resize only.
       const measure = () => {
         if (topBarRef.current) {
           setMeasuredTopBarHeight(topBarRef.current.offsetHeight);
@@ -333,7 +335,6 @@ const App = () => {
     }
 
     const measure = () => {
-      // Use getBoundingClientRect to include padding + border exactly as rendered.
       const h = node.getBoundingClientRect().height;
       setMeasuredTopBarHeight(h);
     };
@@ -407,6 +408,7 @@ const App = () => {
 
   const cancelRepeatCycle = () => {
     navRepeatActiveRef.current = false;
+    setNavRepeatActive(false);
     cancelAllSpeech();
     stopRepeatListening();
     setLastRecognized('');
@@ -788,6 +790,7 @@ const App = () => {
 
   const finishNavRepeat = useCallback(() => {
     navRepeatActiveRef.current = false;
+    setNavRepeatActive(false);
     cancelAllSpeech();
     stopRepeatListening();
     setLastRecognized('');
@@ -814,6 +817,7 @@ const App = () => {
     cancelRepeatCycle();
 
     navRepeatActiveRef.current = true;
+    setNavRepeatActive(true);
     navRepeatCardTypeRef.current = cardType;
 
     currentCardTypeRef.current = cardType;
@@ -847,6 +851,7 @@ const App = () => {
     stopRepeatListening();
 
     navRepeatActiveRef.current = false;
+    setNavRepeatActive(false);
 
     setIsStudying(false);
     setTimeRemaining(0);
@@ -929,6 +934,7 @@ const App = () => {
     cancelAllSpeech();
     stopRepeatListening();
     navRepeatActiveRef.current = false;
+    setNavRepeatActive(false);
     setTimeRemaining(0);
     timeRemainingRef.current = 0;
     lastSpokenRef.current = '';
@@ -1169,7 +1175,7 @@ const App = () => {
     topPanelWidth: { type: 'number', min: 300, max: 2000, default: 916 },
     cardWidth: { type: 'number', min: 150, max: 800, default: 400 },
     cardHeight: { type: 'number', min: 150, max: 800, default: 400 },
-    cardGap: { type: 'number', min: 5, max: 100, default: 50 },
+    cardGap: { type: 'number', min: 5, max: 100, default: 10 },
     fontSize: { type: 'number', min: 8, max: 48, default: 32 },
     showSvgBorder: { type: 'boolean', default: false },
     showTranscription: { type: 'boolean', default: true },
@@ -1636,54 +1642,68 @@ const App = () => {
     }
   }, [currentRecord, dbLoaded]);
 
-  const handleCardClick = (cardType) => {
-    if (isStudying) return;
-    if (!dbLoaded || !currentRecord) return;
-    if (!voiceSupport) return;
+const handleCardClick = (cardType) => {
+  if (isStudying) return;
+  if (!dbLoaded || !currentRecord) return;
+  if (!voiceSupport) return;
 
-    let word = '';
-    let translation = '';
-    if (cardType === 'singular') {
-      word = currentRecord.singular?.word || '';
-      translation = currentRecord.singular?.translation || '';
-    } else {
-      word = currentRecord.plural?.word || '';
-      translation = currentRecord.plural?.translation || '';
-    }
-    if (!word || word.trim() === '') return;
+  let word = '';
+  let translation = '';
+  if (cardType === 'singular') {
+    word = currentRecord.singular?.word || '';
+    translation = currentRecord.singular?.translation || '';
+  } else {
+    word = currentRecord.plural?.word || '';
+    translation = currentRecord.plural?.translation || '';
+  }
+  if (!word || word.trim() === '') return;
 
-    if (settings.repeatAfterMe) {
-      if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
-        cancelRepeatCycle();
-        setCardPulsing(cardType, false);
-        setManualPulseCard(null);
-        return;
-      }
-      startNavRepeatCycleRef.current?.(cardType, word);
+  // ---- Repeat-after-me branch (unchanged) ----
+  if (settings.repeatAfterMe) {
+    if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
+      cancelRepeatCycle();
+      setCardPulsing(cardType, false);
+      setManualPulseCard(null);
       return;
     }
+    startNavRepeatCycleRef.current?.(cardType, word);
+    return;
+  }
 
-    const currentVoice = getCurrentVoice();
-    if (!currentVoice) return;
+  // ---- Normal (navigation) branch ----
+  // ✅ If this card is already pronouncing / pulsing, stop it instead of
+  //    restarting it. This makes a second click on the same card act as a
+  //    "stop" toggle.
+  if (manualPulseCard === cardType) {
+    cancelAllSpeech();
+    setCardPulsing(cardType, false);
+    setManualPulseCard(null);
+    return;
+  }
 
-    clearManualPulse();
-    setCardPulsing(cardType, true);
-    setManualPulseCard(cardType);
-    const finishPronunciation = () => clearManualPulse();
+  const currentVoice = getCurrentVoice();
+  if (!currentVoice) return;
 
-    if (settings.pronounceTranslation && translation && translation.trim() !== '') {
-      speakText(word, () => {
-        const translationVoice = getCurrentVoice(settings.translationVoiceName);
-        if (translationVoice) {
-          speakText(translation, finishPronunciation, settings.translationVoiceName, settings.translationRepeatTimes);
-        } else {
-          finishPronunciation();
-        }
-      });
-    } else {
-      speakText(word, finishPronunciation);
-    }
-  };
+  // If another card was pulsing, clear it first (only one card at a time).
+  clearManualPulse();
+
+  setCardPulsing(cardType, true);
+  setManualPulseCard(cardType);
+  const finishPronunciation = () => clearManualPulse();
+
+  if (settings.pronounceTranslation && translation && translation.trim() !== '') {
+    speakText(word, () => {
+      const translationVoice = getCurrentVoice(settings.translationVoiceName);
+      if (translationVoice) {
+        speakText(translation, finishPronunciation, settings.translationVoiceName, settings.translationRepeatTimes);
+      } else {
+        finishPronunciation();
+      }
+    });
+  } else {
+    speakText(word, finishPronunciation);
+  }
+};
 
   const handleCardKeyDown = (cardType) => (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -1710,19 +1730,9 @@ const App = () => {
   ].filter(Boolean).join(' ');
 
   // ---- Auto-align computation ----------------------------------
-  // When autoAlign is ON:
-  //   • LANDSCAPE: two cards side by side.
-  //       – 25px inset from left and right edges.
-  //       – 20px between top bar and cards.
-  //       – 20px between the two cards.
-  //       – 20px between cards and bottom edge.
-  //   • PORTRAIT: each card on its OWN ROW (stacked).
-  //       – 15px between top bar and first card.
-  //       – 15px between the two cards.
-  //       – 15px between plural card and bottom edge.
-  //       – Card height is derived from the ACTUAL measured top-bar height,
-  //         so it stays correct whether the top bar is one row or two.
-  // When autoAlign is OFF: raw numeric settings are used as-is.
+  // When autoAlign is ON the user-supplied cardGap drives ALL paddings
+  // around the cards: top bar → cards, cards → bottom, between the
+  // two cards, and left/right inset of the cards row.
   const viewportW = displayInfo
     ? (displayInfo.viewportClientWidth || displayInfo.viewportCssWidth || 0)
     : 0;
@@ -1734,8 +1744,6 @@ const App = () => {
     displayInfo &&
     displayInfo.viewportClientWidth > displayInfo.viewportClientHeight;
 
-  // Effective top bar height: prefer the measured value; fall back to a
-  // sensible constant until the ResizeObserver reports one.
   const fallbackTopBarHeight = isLandscape
     ? TOP_BAR_HEIGHT_LANDSCAPE
     : TOP_BAR_HEIGHT_PORTRAIT;
@@ -1744,23 +1752,29 @@ const App = () => {
       ? measuredTopBarHeight
       : fallbackTopBarHeight;
 
-  // Defaults: raw numeric settings (used when autoAlign is OFF).
+  // The single gap value used in auto-align mode.
+  const autoGap = Math.max(
+    5,
+    Math.min(100, Number(settings.cardGap) || 10)
+  );
+
   let effectiveTopPanelWidth = settings.topPanelWidth;
   let effectiveCardWidth = settings.cardWidth;
   let effectiveCardHeight = settings.cardHeight;
   let effectiveGap = settings.cardGap;
-  let sideInset = 0;          // left/right inset (landscape only)
-  let topGap = 0;             // top bar → cards
-  let bottomGap = 0;          // cards → bottom edge
+  let sideInset = 0;
+  let topGap = 0;
+  let bottomGap = 0;
 
   if (settings.autoAlign && viewportW > 0) {
-    if (isLandscape) {
-      // ---- LANDSCAPE ----
-      effectiveGap = AUTO_ALIGN_GAP_LANDSCAPE;
-      topGap = AUTO_ALIGN_GAP_LANDSCAPE;
-      bottomGap = AUTO_ALIGN_GAP_LANDSCAPE;
-      sideInset = AUTO_ALIGN_SIDE_INSET;
+    // One gap value drives everything around the cards.
+    effectiveGap = autoGap;
+    topGap = autoGap;
+    bottomGap = autoGap;
+    sideInset = autoGap;
 
+    if (isLandscape) {
+      // Two cards side by side.
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
 
@@ -1771,26 +1785,18 @@ const App = () => {
         viewportH - effectiveTopBarHeight - topGap - bottomGap;
       effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, Math.floor(hAvail));
     } else {
-      // ---- PORTRAIT ----
-      effectiveGap = AUTO_ALIGN_GAP_PORTRAIT;
-      topGap = AUTO_ALIGN_GAP_PORTRAIT;
-      bottomGap = AUTO_ALIGN_GAP_PORTRAIT;
-
-      effectiveTopPanelWidth = Math.max(300, viewportW - AUTO_H_PADDING);
+      // Portrait: two cards stacked, each with its own row.
+      const rowWidth = viewportW - sideInset * 2;
+      effectiveTopPanelWidth = Math.max(300, rowWidth);
       effectiveCardWidth = Math.max(
         MIN_CARD_WIDTH,
-        Math.min(
-          settings.cardWidth,
-          effectiveTopPanelWidth - 2 * 12   // 12px padding each side of cards-row
-        )
+        Math.min(settings.cardWidth, rowWidth)
       );
 
-      // Two stacked cards + three gaps fill the remaining vertical space.
       const hAvail =
         viewportH
-        - effectiveTopBarHeight   // ← dynamic: whatever the top bar actually is
-        - topGap
-        - effectiveGap            // between the two cards
+        - effectiveTopBarHeight
+        - topGap        - effectiveGap
         - bottomGap;
       const hPerCard = Math.floor(hAvail / 2);
       effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, hPerCard);
@@ -1808,7 +1814,6 @@ const App = () => {
     '--landscape-inset':     `${sideInset}px`,
     '--landscape-bottom':    `${bottomGap}px`,
     '--landscape-top-gap':   `${topGap}px`,
-    // Expose the measured top bar height so CSS can use it if needed.
     '--measured-top-bar-height': `${effectiveTopBarHeight}px`,
   };
 
@@ -1816,7 +1821,12 @@ const App = () => {
 
   const showRepeatChip =
     (settings.repeatAfterMe && isStudying) ||
-    (settings.repeatAfterMe && navRepeatActiveRef.current);
+    (settings.repeatAfterMe && navRepeatActive);
+
+  // ✅ Repeat session active (either auto-study repeat-after-me OR nav-repeat).
+  const repeatSessionActive =
+    (settings.repeatAfterMe && isStudying) ||
+    (settings.repeatAfterMe && navRepeatActive);
 
   return (
     <div
@@ -1855,7 +1865,7 @@ const App = () => {
               type="button"
               className={`header-db-info header-db-info-button ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
               onClick={loadDatabase}
-              disabled={isLoading || isStudying}
+              disabled={isLoading || isStudying || navRepeatActive}
               aria-live="polite"
               aria-atomic="true"
               aria-label={
@@ -1877,7 +1887,7 @@ const App = () => {
                 {settings.loadLessonLocally ? '📁' : '🌐'}
               </span>
 
-              {dbLoaded && currentRecord ? (
+              {dbLoaded && currentRecord && !repeatSessionActive ? (
                 <>
                   <span className="db-info-name">{dbFileName}</span>
                   <span className="db-info-separator" aria-hidden="true">|</span>
@@ -1911,9 +1921,21 @@ const App = () => {
                         {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
                         {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
                         {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
-                        {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat mode</span></>)}
+                        {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat After Me</span></>)}
                       </span>
                     </>
+                  )}
+                </>
+              ) : repeatSessionActive ? (
+                <>
+                  {showRepeatChip && (
+                    <span className="db-info-repeat" aria-live="polite">
+                      {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
+                      {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                      {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                      {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
+                      {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat After Me</span></>)}
+                    </span>
                   )}
                 </>
               ) : (
@@ -2063,6 +2085,16 @@ const App = () => {
                     Auto align elements
                   </label>
                 </div>
+
+                {/* "Gap between cards" is ALWAYS visible.
+                    When auto-align is ON, it drives all paddings around the cards. */}
+                <div className="setting-item">
+                  <label htmlFor="setting-cardGap">Gap between cards (px):</label>
+                  <input id="setting-cardGap" type="number" value={settings.cardGap}
+                    onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 10)}
+                    min="5" max="100" step="5" />
+                </div>
+
                 {!settings.autoAlign && (
                   <>
                     <div className="setting-item">
@@ -2083,14 +2115,9 @@ const App = () => {
                         onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
                         min="150" max="800" step="10" />
                     </div>
-                    <div className="setting-item">
-                      <label htmlFor="setting-cardGap">Gap between cards (px):</label>
-                      <input id="setting-cardGap" type="number" value={settings.cardGap}
-                        onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 50)}
-                        min="5" max="100" step="5" />
-                    </div>
                   </>
                 )}
+
                 <div className="setting-item">
                   <label htmlFor="setting-fontSize">Font Size (px):</label>
                   <input id="setting-fontSize" type="number" value={settings.fontSize}
@@ -2332,7 +2359,7 @@ const App = () => {
                       <div>
                         gap top bar → cards: {topGap}px
                         {' '}· gap cards → bottom: {bottomGap}px
-                        {isLandscape && <> · side inset: {sideInset}px</>}
+                        {' '}· side inset: {sideInset}px
                       </div>
                     )}
                   </div>

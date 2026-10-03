@@ -71,15 +71,17 @@ text
 ├────────────── top bar (row 2) ──────────────┤
 │ 🌐 filename.dbms | ID: 5 / 120              │
 └─────────────────────────────────────────────┘
-                 ↕ 15px
+                 ↕ 10px
 ┌─────────────────────────────────────────────┐
 │              singular card                   │
 │                (auto height)                 │
 └─────────────────────────────────────────────┘
-                 ↕ 15px
+                 ↕ 10px
 ┌─────────────────────────────────────────────┐
 │               plural card                    │
 │                (auto height)                 │
 └─────────────────────────────────────────────┘
-                 ↕ 15px
+                 ↕ 10px
            bottom of viewport
+
+Clicking an Already-Active Card Should Stop Its Pronunciation and Flashing
