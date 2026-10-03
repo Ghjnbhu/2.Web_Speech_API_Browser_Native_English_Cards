@@ -97,6 +97,9 @@
 //                 AFTER the "Display Options" section in the Settings modal.
 //                 New section order: Study Settings → Voice Settings →
 //                 Display Options → Card Appearance.
+// App.jsx - CHANGED: The non-studying Start button now shows "🎧 Start"
+//                 instead of "🚀 Start".
+// App.jsx - DEFAULT: "Pronounce translation" now defaults to CHECKED (true).
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -345,7 +348,7 @@ const App = () => {
     selectedVoiceName: "",
     repeatTimes: 3,
     autoPronounce: true,
-    pronounceTranslation: false,
+    pronounceTranslation: true,   // default is CHECKED
     translationVoiceName: "",
     translationRepeatTimes: 1,
     randomOrder: false,
@@ -1880,7 +1883,7 @@ const App = () => {
   const startButtonLabel = () => {
     if (isStudying) return '⏹️ Stop';
     if (settings.repeatAfterMe) return '🎧🎤 Repeat';
-    return 'Start 🎧';
+    return '🎧 Start';
   };
   const startButtonAriaLabel = () => {
     if (isStudying) return 'Stop study session';
