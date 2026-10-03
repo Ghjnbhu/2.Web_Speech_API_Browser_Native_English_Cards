@@ -34,6 +34,9 @@
    - FIXED: .top-bar box-shadow removed and replaced with a subtle bottom
             border so the visible bottom edge of the bar ends exactly where
             the auto-align gap begins (no visual "spill" into the gap).
+   - NEW: When the status pill button is disabled, its leading 🌐 / 📁 icon
+          is hidden (aria-hidden anyway), leaving only the meaningful state
+          text inside the pill.
 */
 
 /* ============================================================
@@ -171,8 +174,15 @@ body.light { background: #f5f5f5; color: #333; }
 
 .header-db-info-button:disabled {
   cursor: not-allowed;
-  background: transparent;
+  background: transparent;   /* show the top bar through it → exact match */
   border-color: transparent;
+}
+
+/* ✅ Hide the leading 🌐 / 📁 icon while the pill is disabled.
+   The icon span already carries aria-hidden="true", so hiding it
+   visually has no screen-reader side effect. */
+.header-db-info-button:disabled .db-info-label {
+  display: none;
 }
 
 body.light .header-db-info-button:disabled {
@@ -1139,7 +1149,7 @@ body.light .active-pulse {
    Gap top bar → cards:    var(--landscape-top-gap)  (= card-gap)
    Gap between cards:      var(--card-gap)           (= card-gap)
    Gap cards → bottom:     var(--landscape-bottom)   (= card-gap)
-   Left/right inset:       var(--card-gap)           (= card-gap)  ← FIXED
+   Left/right inset:       var(--card-gap)           (= card-gap)
 */
 [data-auto-align="on"][data-orientation="portrait"] .page-content {
   padding: var(--landscape-top-gap, 10px) 0 var(--landscape-bottom, 10px) 0;
@@ -1151,10 +1161,10 @@ body.light .active-pulse {
   flex-wrap: nowrap;
   justify-content: flex-start;
   align-items: center;
-  gap: var(--card-gap);                 /* gap between the two stacked cards */
+  gap: var(--card-gap);
   width: 100%;
   max-width: 100%;
-  padding: 0 var(--card-gap);           /* ← FIXED: uses the same gap for left/right */
+  padding: 0 var(--card-gap);
   box-sizing: border-box;
 }
 

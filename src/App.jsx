@@ -59,6 +59,33 @@
 //                 to UNCHECKED (false).
 // App.jsx - DEFAULT: when "🎤 Repeat after me" is enabled, "Attempt:" is
 //                 forced to 1 (repeatTimes = 1).
+// App.jsx - FIX 1: SpeechRecognition.startListening now uses continuous: true
+//                 so the engine keeps context across attempts, improving
+//                 recognition of minimal-pair words (e.g. "Bean" vs "Bin").
+// App.jsx - FIX 3: The transcript is no longer reset per attempt. Each
+//                 attempt now compares the expected word against the LAST
+//                 CHUNK of the accumulated transcript (last N words),
+//                 which preserves the engine's context window.
+// App.jsx - MOVED: the recognized-word chip (.recognized-chip) now renders
+//                 INSIDE the status pill, immediately after the repeat chip
+//                 (.db-info-repeat), instead of next to the Start/Repeat
+//                 button. This makes the pill self-contained during a
+//                 repeat-after-me session.
+// App.jsx - NEW: Minimum listening window (LISTEN_MIN_MS). The mic stays
+//                 open for at least this long after startRepeatListening(),
+//                 even if the engine emits a stale transcript or interim
+//                 results too early. Guarantees the user always has time to
+//                 pronounce the word.
+//                 Implementation: transcriptBaselineRef + listenStartedAtRef
+//                 are snapshotted in startRepeatListening(); the transcript
+//                 effect bails while the transcript hasn't grown past the
+//                 baseline AND while the min window hasn't elapsed (adding
+//                 the remaining time to its existing 800 ms debounce).
+// App.jsx - FIXED: the recognized-word chip now shows ONLY the words the
+//                 user said AFTER the current attempt's mic opened. It slices
+//                 the transcript at transcriptBaselineRef.current before
+//                 running lastWords()/comparison, so previous attempts'
+//                 words no longer accumulate in the chip.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -77,6 +104,17 @@ const MIN_CARD_HEIGHT = 180;
 // Fallback top bar heights (used only until the observer reports a real value)
 const TOP_BAR_HEIGHT_LANDSCAPE = 52;
 const TOP_BAR_HEIGHT_PORTRAIT  = 96;   // two rows
+
+// When comparing against the accumulated transcript we take only the last N
+// words. Six is enough for a short utterance, and small enough that stale
+// audio from previous attempts does not dominate the comparison.
+const TRANSCRIPT_CHUNK_WORDS = 6;
+
+// Minimum time (ms) the mic stays open for a repeat-after-me attempt,
+// measured from the moment startRepeatListening() fires. Guarantees the
+// user always has a window to pronounce the word, even if the engine
+// emits a stale transcript or produces interim results too early.
+const LISTEN_MIN_MS = 2500;
 
 // =============================================================
 // Utilities
@@ -130,6 +168,14 @@ const normalizeVoiceName = (name) =>
 const stripTrailingPunctuation = (text) => {
   if (!text) return '';
   return String(text).replace(/[.,!?;:]+$/g, '').trim();
+};
+
+// Return the last N words of a transcript string, whitespace-collapsed.
+const lastWords = (text, n) => {
+  if (!text) return '';
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  if (words.length <= n) return words.join(' ');
+  return words.slice(-n).join(' ');
 };
 
 const readDisplayInfo = () => {
@@ -290,6 +336,12 @@ const App = () => {
 
   const navRepeatActiveRef = useRef(false);
   const navRepeatCardTypeRef = useRef('singular');
+
+  // Minimum-window support: snapshot the transcript length and the moment
+  // the mic opened, so the transcript effect can ignore stale content and
+  // refuse to close the mic before LISTEN_MIN_MS has elapsed.
+  const transcriptBaselineRef = useRef(0);
+  const listenStartedAtRef = useRef(0);
 
   const speakTextRef = useRef(null);
   const startRepeatListeningRef = useRef(null);
@@ -653,10 +705,16 @@ const App = () => {
       total: totalRepeatsRef.current,
     });
     setLastRecognized('');
-    resetTranscript();
+
+    // Snapshot the current transcript length so the transcript effect can
+    // ignore stale content from previous attempts.
+    transcriptBaselineRef.current = (transcript || '').length;
+    // Start the minimum-window clock.
+    listenStartedAtRef.current = Date.now();
+
     try {
       SpeechRecognitionLib.startListening({
-        continuous: false,
+        continuous: true,
         interimResults: true,
         language: 'en-US',
       });
@@ -664,7 +722,7 @@ const App = () => {
       console.error('SpeechRecognition start failed:', err);
       setRepeatStatus('error');
     }
-  }, [browserSupportsSpeechRecognition, resetTranscript]);
+  }, [browserSupportsSpeechRecognition, transcript]);
 
   useEffect(() => { startRepeatListeningRef.current = startRepeatListening; });
 
@@ -1049,17 +1107,39 @@ const App = () => {
     };
   }, []);
 
+  // ---- Transcript handling ----
+  // The engine runs in `continuous: true` mode and we do not reset the
+  // transcript between attempts. To avoid showing stale words from
+  // previous attempts, we slice the transcript at the baseline snapshot
+  // taken when the mic opened for THIS attempt. Only the new content
+  // (the current attempt's utterance) is used for display and comparison.
+  //
+  // Two guards ensure the user always has time to pronounce the word:
+  //   1. Ignore transcript content that was already there before the mic
+  //      opened for this attempt (transcriptBaselineRef).
+  //   2. Refuse to close the mic before LISTEN_MIN_MS has elapsed since
+  //      the mic opened (listenStartedAtRef).
   useEffect(() => {
     if (!isListeningForRepeat) return;
     if (!transcript || transcript.trim() === '') return;
 
+    // Guard 1: ignore stale transcript content from previous attempts.
+    if (transcript.length <= transcriptBaselineRef.current) return;
+
+    // Guard 2: respect the minimum listening window.
+    const elapsed = Date.now() - listenStartedAtRef.current;
+    const remaining = Math.max(0, LISTEN_MIN_MS - elapsed);
+
     const handle = setTimeout(() => {
       const expected = expectedWordRef.current;
       const spoken = transcript;
-      const cleaned = stripTrailingPunctuation(spoken);
+      // Only use what was said AFTER this attempt's mic opened.
+      const wordsSinceBaseline = spoken.slice(transcriptBaselineRef.current);
+      const chunk = lastWords(wordsSinceBaseline, TRANSCRIPT_CHUNK_WORDS);
+      const cleaned = stripTrailingPunctuation(chunk);
       setLastRecognized(cleaned);
 
-      const ratio = similarityRatio(expected, spoken);
+      const ratio = similarityRatio(expected, chunk);
       const attemptIndex = currentRepeatIndexRef.current;
       const totalAttempts = totalRepeatsRef.current;
 
@@ -1067,7 +1147,6 @@ const App = () => {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
-        resetTranscript();
         const isLastAttempt = attemptIndex + 1 >= totalAttempts;
         setRepeatStatus('matched');
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
@@ -1092,7 +1171,6 @@ const App = () => {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
-        resetTranscript();
         setRepeatStatus('retry');
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
 
@@ -1123,7 +1201,7 @@ const App = () => {
           }
         }, 700);
       }
-    }, 800);
+    }, 800 + remaining);
 
     return () => clearTimeout(handle);
   }, [transcript, isListeningForRepeat, resetTranscript, speakOneAndListen]);
@@ -1313,12 +1391,11 @@ const App = () => {
 
   const handleSettingChange = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
 
-  // ✅ When "🎤 Repeat after me" is enabled, force Attempt: = 1.
+  // When "🎤 Repeat after me" is enabled, force Attempt: = 1.
   const handleRepeatAfterMeToggle = (checked) => {
     setSettings(prev => ({
       ...prev,
       repeatAfterMe: checked,
-      // Force Attempt to 1 when the mode is enabled.
       ...(checked ? { repeatTimes: 1 } : {}),
     }));
   };
@@ -1928,19 +2005,45 @@ const App = () => {
                         {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
                         {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat After Me</span></>)}
                       </span>
+
+                      {lastRecognized && (
+                        <span
+                          className={`recognized-chip recognized-${repeatStatus || 'idle'}`}
+                          role="status"
+                          aria-live="polite"
+                          aria-atomic="true"
+                          title="Recognized word"
+                        >
+                          {lastRecognized}
+                        </span>
+                      )}
                     </>
                   )}
                 </>
               ) : repeatSessionActive ? (
                 <>
                   {showRepeatChip && (
-                    <span className="db-info-repeat" aria-live="polite">
-                      {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
-                      {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
-                      {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
-                      {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
-                      {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat After Me</span></>)}
-                    </span>
+                    <>
+                      <span className="db-info-repeat" aria-live="polite">
+                        {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
+                        {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                        {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
+                        {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
+                        {!repeatStatus && (<><span aria-hidden="true">🎧</span><span>Repeat After Me</span></>)}
+                      </span>
+
+                      {lastRecognized && (
+                        <span
+                          className={`recognized-chip recognized-${repeatStatus || 'idle'}`}
+                          role="status"
+                          aria-live="polite"
+                          aria-atomic="true"
+                          title="Recognized word"
+                        >
+                          {lastRecognized}
+                        </span>
+                      )}
+                    </>
                   )}
                 </>
               ) : (
@@ -1973,18 +2076,6 @@ const App = () => {
                   <span aria-hidden="true">▶</span>
                 </button>
               </>
-            )}
-
-            {showRepeatChip && lastRecognized && (
-              <span
-                className={`recognized-chip recognized-${repeatStatus || 'idle'}`}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-                title="Recognized word"
-              >
-                {lastRecognized}
-              </span>
             )}
 
             {dbLoaded && allRecords.length > 0 && (
@@ -2091,8 +2182,6 @@ const App = () => {
                   </label>
                 </div>
 
-                {/* "Gap between cards" is ALWAYS visible.
-                    When auto-align is ON, it drives all paddings around the cards. */}
                 <div className="setting-item">
                   <label htmlFor="setting-cardGap">Gap between cards (px):</label>
                   <input id="setting-cardGap" type="number" value={settings.cardGap}
@@ -2367,6 +2456,9 @@ const App = () => {
                         {' '}· side inset: {sideInset}px
                       </div>
                     )}
+                    <div style={{ marginTop: '0.5rem' }}>
+                      listening min: {LISTEN_MIN_MS} ms
+                    </div>
                   </div>
                 )}
               </div>
