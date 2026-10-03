@@ -53,6 +53,12 @@
 //                 indicators (Listening / Matched / Retry / Repeat After Me)
 //                 remain visible.
 // App.jsx - RENAMED: "🎧 Repeat mode" → "🎧 Repeat After Me" in the pill.
+// App.jsx - FIXED: navigation-mode click on an already-pulsing card now
+//                 stops its pronunciation and pulse (toggle behavior).
+// App.jsx - DEFAULT: "Repeat pronunciation if words not equal" now defaults
+//                 to UNCHECKED (false).
+// App.jsx - DEFAULT: when "🎤 Repeat after me" is enabled, "Attempt:" is
+//                 forced to 1 (repeatTimes = 1).
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -221,7 +227,7 @@ const App = () => {
     topPanelWidth: 916,
     cardWidth: 400,
     cardHeight: 400,
-    cardGap: 10,               // ← default gap for auto-align: all paddings around cards
+    cardGap: 10,               // default gap for auto-align: all paddings around cards
     showTranscription: true,
     showTranslation: true,
     loadLessonLocally: false,
@@ -238,7 +244,7 @@ const App = () => {
     translationRepeatTimes: 1,
     randomOrder: false,
     repeatAfterMe: false,
-    repeatOnWordsNotEqual: true,
+    repeatOnWordsNotEqual: false,   // default is UNCHECKED
   });
 
   const singularSvgRef = useRef(null);
@@ -1192,7 +1198,7 @@ const App = () => {
     translationRepeatTimes: { type: 'number', min: 1, max: 5, default: 3 },
     randomOrder: { type: 'boolean', default: true },
     repeatAfterMe: { type: 'boolean', default: false },
-    repeatOnWordsNotEqual: { type: 'boolean', default: true },
+    repeatOnWordsNotEqual: { type: 'boolean', default: false }, // default UNCHECKED
   };
 
   const validateSettings = (raw) => {
@@ -1306,6 +1312,16 @@ const App = () => {
   };
 
   const handleSettingChange = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
+
+  // ✅ When "🎤 Repeat after me" is enabled, force Attempt: = 1.
+  const handleRepeatAfterMeToggle = (checked) => {
+    setSettings(prev => ({
+      ...prev,
+      repeatAfterMe: checked,
+      // Force Attempt to 1 when the mode is enabled.
+      ...(checked ? { repeatTimes: 1 } : {}),
+    }));
+  };
 
   const handleVoiceChange = (voiceName) => {
     cancelAllSpeech();
@@ -1642,68 +1658,65 @@ const App = () => {
     }
   }, [currentRecord, dbLoaded]);
 
-const handleCardClick = (cardType) => {
-  if (isStudying) return;
-  if (!dbLoaded || !currentRecord) return;
-  if (!voiceSupport) return;
+  const handleCardClick = (cardType) => {
+    if (isStudying) return;
+    if (!dbLoaded || !currentRecord) return;
+    if (!voiceSupport) return;
 
-  let word = '';
-  let translation = '';
-  if (cardType === 'singular') {
-    word = currentRecord.singular?.word || '';
-    translation = currentRecord.singular?.translation || '';
-  } else {
-    word = currentRecord.plural?.word || '';
-    translation = currentRecord.plural?.translation || '';
-  }
-  if (!word || word.trim() === '') return;
+    let word = '';
+    let translation = '';
+    if (cardType === 'singular') {
+      word = currentRecord.singular?.word || '';
+      translation = currentRecord.singular?.translation || '';
+    } else {
+      word = currentRecord.plural?.word || '';
+      translation = currentRecord.plural?.translation || '';
+    }
+    if (!word || word.trim() === '') return;
 
-  // ---- Repeat-after-me branch (unchanged) ----
-  if (settings.repeatAfterMe) {
-    if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
-      cancelRepeatCycle();
+    // ---- Repeat-after-me branch ----
+    if (settings.repeatAfterMe) {
+      if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
+        cancelRepeatCycle();
+        setCardPulsing(cardType, false);
+        setManualPulseCard(null);
+        return;
+      }
+      startNavRepeatCycleRef.current?.(cardType, word);
+      return;
+    }
+
+    // ---- Normal (navigation) branch ----
+    // Toggle: clicking an already-pulsing card stops its pronunciation + pulse.
+    if (manualPulseCard === cardType) {
+      cancelAllSpeech();
       setCardPulsing(cardType, false);
       setManualPulseCard(null);
       return;
     }
-    startNavRepeatCycleRef.current?.(cardType, word);
-    return;
-  }
 
-  // ---- Normal (navigation) branch ----
-  // ✅ If this card is already pronouncing / pulsing, stop it instead of
-  //    restarting it. This makes a second click on the same card act as a
-  //    "stop" toggle.
-  if (manualPulseCard === cardType) {
-    cancelAllSpeech();
-    setCardPulsing(cardType, false);
-    setManualPulseCard(null);
-    return;
-  }
+    const currentVoice = getCurrentVoice();
+    if (!currentVoice) return;
 
-  const currentVoice = getCurrentVoice();
-  if (!currentVoice) return;
+    clearManualPulse();
 
-  // If another card was pulsing, clear it first (only one card at a time).
-  clearManualPulse();
+    setCardPulsing(cardType, true);
+    setManualPulseCard(cardType);
+    const finishPronunciation = () => clearManualPulse();
 
-  setCardPulsing(cardType, true);
-  setManualPulseCard(cardType);
-  const finishPronunciation = () => clearManualPulse();
-
-  if (settings.pronounceTranslation && translation && translation.trim() !== '') {
-    speakText(word, () => {
-      const translationVoice = getCurrentVoice(settings.translationVoiceName);
-      if (translationVoice) {
-        speakText(translation, finishPronunciation, settings.translationVoiceName, settings.translationRepeatTimes);
-      } else {
-        finishPronunciation();
-      }
-    });
-  } else {
-    speakText(word, finishPronunciation);
-  }
-};
+    if (settings.pronounceTranslation && translation && translation.trim() !== '') {
+      speakText(word, () => {
+        const translationVoice = getCurrentVoice(settings.translationVoiceName);
+        if (translationVoice) {
+          speakText(translation, finishPronunciation, settings.translationVoiceName, settings.translationRepeatTimes);
+        } else {
+          finishPronunciation();
+        }
+      });
+    } else {
+      speakText(word, finishPronunciation);
+    }
+  };
 
   const handleCardKeyDown = (cardType) => (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -1730,9 +1743,6 @@ const handleCardClick = (cardType) => {
   ].filter(Boolean).join(' ');
 
   // ---- Auto-align computation ----------------------------------
-  // When autoAlign is ON the user-supplied cardGap drives ALL paddings
-  // around the cards: top bar → cards, cards → bottom, between the
-  // two cards, and left/right inset of the cards row.
   const viewportW = displayInfo
     ? (displayInfo.viewportClientWidth || displayInfo.viewportCssWidth || 0)
     : 0;
@@ -1752,7 +1762,6 @@ const handleCardClick = (cardType) => {
       ? measuredTopBarHeight
       : fallbackTopBarHeight;
 
-  // The single gap value used in auto-align mode.
   const autoGap = Math.max(
     5,
     Math.min(100, Number(settings.cardGap) || 10)
@@ -1767,14 +1776,12 @@ const handleCardClick = (cardType) => {
   let bottomGap = 0;
 
   if (settings.autoAlign && viewportW > 0) {
-    // One gap value drives everything around the cards.
     effectiveGap = autoGap;
     topGap = autoGap;
     bottomGap = autoGap;
     sideInset = autoGap;
 
     if (isLandscape) {
-      // Two cards side by side.
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
 
@@ -1785,7 +1792,6 @@ const handleCardClick = (cardType) => {
         viewportH - effectiveTopBarHeight - topGap - bottomGap;
       effectiveCardHeight = Math.max(MIN_CARD_HEIGHT, Math.floor(hAvail));
     } else {
-      // Portrait: two cards stacked, each with its own row.
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
       effectiveCardWidth = Math.max(
@@ -1823,7 +1829,6 @@ const handleCardClick = (cardType) => {
     (settings.repeatAfterMe && isStudying) ||
     (settings.repeatAfterMe && navRepeatActive);
 
-  // ✅ Repeat session active (either auto-study repeat-after-me OR nav-repeat).
   const repeatSessionActive =
     (settings.repeatAfterMe && isStudying) ||
     (settings.repeatAfterMe && navRepeatActive);
@@ -2161,7 +2166,7 @@ const handleCardClick = (cardType) => {
                     <input
                       type="checkbox"
                       checked={settings.repeatAfterMe}
-                      onChange={(e) => handleSettingChange('repeatAfterMe', e.target.checked)}
+                      onChange={(e) => handleRepeatAfterMeToggle(e.target.checked)}
                     />
                     🎤 Repeat after me
                   </label>
