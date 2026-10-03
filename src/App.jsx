@@ -86,6 +86,17 @@
 //                 the transcript at transcriptBaselineRef.current before
 //                 running lastWords()/comparison, so previous attempts'
 //                 words no longer accumulate in the chip.
+// App.jsx - NEW: The "voices loaded" success alert itemizes only the
+//                 Russian (ru-RU) and English (en-GB / en-US / en-AU) voices.
+//                 The Russian group is listed FIRST, then the English group.
+// App.jsx - NEW: On successful voice load, if no voice has been chosen yet,
+//                 a RANDOM English voice (en-GB / en-US / en-AU) is selected
+//                 for "Select Voice", and a RANDOM Russian voice (ru-RU)
+//                 is selected for "Translation Voice".
+// App.jsx - MOVED: All options from Settings / "Card Appearance" now render
+//                 AFTER the "Display Options" section in the Settings modal.
+//                 New section order: Study Settings → Voice Settings →
+//                 Display Options → Card Appearance.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -115,6 +126,10 @@ const TRANSCRIPT_CHUNK_WORDS = 6;
 // user always has a window to pronounce the word, even if the engine
 // emits a stale transcript or produces interim results too early.
 const LISTEN_MIN_MS = 2500;
+
+// Voice-group language prefixes
+const ENGLISH_LANG_PREFIXES = ['en-gb', 'en-us', 'en-au'];
+const RUSSIAN_LANG_PREFIXES = ['ru-ru'];
 
 // =============================================================
 // Utilities
@@ -228,6 +243,51 @@ const useDisplayInfo = () => {
   }, []);
 
   return info;
+};
+
+// ---- Voice group helpers ----
+const matchesLangPrefix = (lang, prefixes) => {
+  const l = (lang || '').toLowerCase().replace('_', '-');
+  return prefixes.some((p) => l === p || l.startsWith(p + '-'));
+};
+
+const filterVoicesByLangPrefixes = (voices, prefixes) =>
+  voices.filter((v) => matchesLangPrefix(v.lang, prefixes));
+
+// Pick a random element from an array (uniform). Returns null if empty.
+const pickRandom = (arr) => {
+  if (!arr || arr.length === 0) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+};
+
+// Build a categorized summary of loaded voices for the success alert.
+// Shows only voices whose language matches the Russian or English groups.
+// Order: Russian (ru-RU) FIRST, then English (en-GB / en-US / en-AU).
+const buildVoicesLoadedMessage = (voices) => {
+  const englishVoices = filterVoicesByLangPrefixes(voices, ENGLISH_LANG_PREFIXES);
+  const russianVoices = filterVoicesByLangPrefixes(voices, RUSSIAN_LANG_PREFIXES);
+
+  const formatVoice = (v) => `  • ${v.name} (${v.lang})`;
+
+  const lines = [`✅ ${voices.length} voice(s) loaded successfully!`];
+
+  lines.push('');
+  lines.push(`🇷🇺 Russian (ru-RU): ${russianVoices.length}`);
+  if (russianVoices.length > 0) {
+    russianVoices.forEach((v) => lines.push(formatVoice(v)));
+  } else {
+    lines.push('  (none)');
+  }
+
+  lines.push('');
+  lines.push(`🇬🇧 English (en-GB / en-US / en-AU): ${englishVoices.length}`);
+  if (englishVoices.length > 0) {
+    englishVoices.forEach((v) => lines.push(formatVoice(v)));
+  } else {
+    lines.push('  (none)');
+  }
+
+  return lines.join('\n');
 };
 
 // =============================================================
@@ -476,6 +536,45 @@ const App = () => {
     lastSpokenRef.current = '';
   };
 
+  // Apply loaded voices: update state, auto-pick default voices if the user
+  // has not chosen any yet, then alert with the categorized summary.
+  const applyLoadedVoices = (voices) => {
+    setAvailableVoices(voices);
+    setVoicesLoaded(true);
+    setVoiceSupport(true);
+    setIsLoadingVoices(false);
+
+    const englishVoices = filterVoicesByLangPrefixes(voices, ENGLISH_LANG_PREFIXES);
+    const russianVoices = filterVoicesByLangPrefixes(voices, RUSSIAN_LANG_PREFIXES);
+
+    // Read current selections from settingsRef so we don't clobber a choice
+    // the user already made (or a value restored from a saved settings file).
+    const currentSelected = settingsRef.current.selectedVoiceName || "";
+    const currentTranslation = settingsRef.current.translationVoiceName || "";
+
+    const nextSelectedVoiceName =
+      currentSelected || (pickRandom(englishVoices)?.name ?? pickRandom(voices)?.name ?? "");
+    const nextTranslationVoiceName =
+      currentTranslation || (pickRandom(russianVoices)?.name ?? "");
+
+    if (nextSelectedVoiceName !== currentSelected || nextTranslationVoiceName !== currentTranslation) {
+      setSettings(prev => ({
+        ...prev,
+        selectedVoiceName: prev.selectedVoiceName || nextSelectedVoiceName,
+        translationVoiceName: prev.translationVoiceName || nextTranslationVoiceName,
+      }));
+    }
+
+    // Prime the cached voice so the first utterance does not have to
+    // search the list again.
+    if (nextSelectedVoiceName) {
+      const v = voices.find(x => x.name === nextSelectedVoiceName);
+      if (v) cachedVoiceRef.current = v;
+    }
+
+    alert(buildVoicesLoadedMessage(voices));
+  };
+
   const loadVoices = () => {
     if (!isSpeechSupported()) { setVoiceSupport(false); return; }
     setIsLoadingVoices(true);
@@ -484,19 +583,7 @@ const App = () => {
       if (!mountedRef.current) return true;
       const voices = synthRef.current ? synthRef.current.getVoices() : [];
       if (voices && voices.length > 0) {
-        setAvailableVoices(voices);
-        setVoicesLoaded(true);
-        setVoiceSupport(true);
-        setIsLoadingVoices(false);
-        if (!settings.selectedVoiceName && voices.length > 0) {
-          const defaultVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
-            || voices.find(v => v.lang === 'en-US') || voices[0];
-          if (defaultVoice) {
-            setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
-            cachedVoiceRef.current = defaultVoice;
-          }
-        }
-        alert(`✅ ${voices.length} voice(s) loaded successfully!`);
+        applyLoadedVoices(voices);
         return true;
       }
       return false;
@@ -508,19 +595,7 @@ const App = () => {
       if (!mountedRef.current) return;
       const voices = synthRef.current ? synthRef.current.getVoices() : [];
       if (voices && voices.length > 0) {
-        setAvailableVoices(voices);
-        setVoicesLoaded(true);
-        setVoiceSupport(true);
-        setIsLoadingVoices(false);
-        if (!settings.selectedVoiceName && voices.length > 0) {
-          const defaultVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
-            || voices.find(v => v.lang === 'en-US') || voices[0];
-          if (defaultVoice) {
-            setSettings(prev => ({ ...prev, selectedVoiceName: defaultVoice.name }));
-            cachedVoiceRef.current = defaultVoice;
-          }
-        }
-        alert(`✅ ${voices.length} voice(s) loaded successfully!`);
+        applyLoadedVoices(voices);
         if (synthRef.current && synthRef.current.onvoiceschanged) {
           synthRef.current.onvoiceschanged = null;
         }
@@ -1804,8 +1879,8 @@ const App = () => {
 
   const startButtonLabel = () => {
     if (isStudying) return '⏹️ Stop';
-    if (settings.repeatAfterMe) return '🎤 Repeat';
-    return '🚀 Start';
+    if (settings.repeatAfterMe) return '🎧🎤 Repeat';
+    return 'Start 🎧';
   };
   const startButtonAriaLabel = () => {
     if (isStudying) return 'Stop study session';
@@ -2170,64 +2245,6 @@ const App = () => {
             </div>
             <div className="settings-content">
               <div className="settings-section">
-                <h3>Card Appearance</h3>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={settings.autoAlign}
-                      onChange={(e) => handleSettingChange('autoAlign', e.target.checked)}
-                    />
-                    Auto align elements
-                  </label>
-                </div>
-
-                <div className="setting-item">
-                  <label htmlFor="setting-cardGap">Gap between cards (px):</label>
-                  <input id="setting-cardGap" type="number" value={settings.cardGap}
-                    onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 10)}
-                    min="5" max="100" step="5" />
-                </div>
-
-                {!settings.autoAlign && (
-                  <>
-                    <div className="setting-item">
-                      <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
-                      <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
-                        onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
-                        min="300" max="2000" step="10" />
-                    </div>
-                    <div className="setting-item">
-                      <label htmlFor="setting-cardWidth">Card Width (px):</label>
-                      <input id="setting-cardWidth" type="number" value={settings.cardWidth}
-                        onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
-                        min="150" max="800" step="10" />
-                    </div>
-                    <div className="setting-item">
-                      <label htmlFor="setting-cardHeight">Card Height (px):</label>
-                      <input id="setting-cardHeight" type="number" value={settings.cardHeight}
-                        onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
-                        min="150" max="800" step="10" />
-                    </div>
-                  </>
-                )}
-
-                <div className="setting-item">
-                  <label htmlFor="setting-fontSize">Font Size (px):</label>
-                  <input id="setting-fontSize" type="number" value={settings.fontSize}
-                    onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)}
-                    min="8" max="48" step="2" />
-                </div>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input type="checkbox" checked={settings.showSvgBorder}
-                      onChange={(e) => handleSettingChange('showSvgBorder', e.target.checked)} />
-                    Show SVG canvas border
-                  </label>
-                </div>
-              </div>
-
-              <div className="settings-section">
                 <h3>Study Settings</h3>
                 <div className="setting-item">
                   <label htmlFor="setting-studyTime">Study Time per Card (seconds):</label>
@@ -2461,6 +2478,64 @@ const App = () => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div className="settings-section">
+                <h3>Card Appearance</h3>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.autoAlign}
+                      onChange={(e) => handleSettingChange('autoAlign', e.target.checked)}
+                    />
+                    Auto align elements
+                  </label>
+                </div>
+
+                <div className="setting-item">
+                  <label htmlFor="setting-cardGap">Gap between cards (px):</label>
+                  <input id="setting-cardGap" type="number" value={settings.cardGap}
+                    onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 10)}
+                    min="5" max="100" step="5" />
+                </div>
+
+                {!settings.autoAlign && (
+                  <>
+                    <div className="setting-item">
+                      <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
+                      <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
+                        onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
+                        min="300" max="2000" step="10" />
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-cardWidth">Card Width (px):</label>
+                      <input id="setting-cardWidth" type="number" value={settings.cardWidth}
+                        onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
+                        min="150" max="800" step="10" />
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-cardHeight">Card Height (px):</label>
+                      <input id="setting-cardHeight" type="number" value={settings.cardHeight}
+                        onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
+                        min="150" max="800" step="10" />
+                    </div>
+                  </>
+                )}
+
+                <div className="setting-item">
+                  <label htmlFor="setting-fontSize">Font Size (px):</label>
+                  <input id="setting-fontSize" type="number" value={settings.fontSize}
+                    onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)}
+                    min="8" max="48" step="2" />
+                </div>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input type="checkbox" checked={settings.showSvgBorder}
+                      onChange={(e) => handleSettingChange('showSvgBorder', e.target.checked)} />
+                    Show SVG canvas border
+                  </label>
+                </div>
               </div>
             </div>
             <div className="settings-footer">
