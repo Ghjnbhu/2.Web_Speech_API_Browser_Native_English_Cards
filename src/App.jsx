@@ -100,6 +100,34 @@
 // App.jsx - CHANGED: The non-studying Start button now shows "🎧 Start"
 //                 instead of "🚀 Start".
 // App.jsx - DEFAULT: "Pronounce translation" now defaults to CHECKED (true).
+// App.jsx - NEW: The DB file name is tracked via a cookie
+//                 (`ecoCards.dbFileName`). It survives page refreshes.
+// App.jsx - FIXED: The status pill now always shows the actual file name
+//                 (without its extension), regardless of any "name" field
+//                 in the lesson JSON.
+// App.jsx - FIXED: The on-mount auto-load no longer compares the cookie
+//                 value against the lessons index. Instead, when the cookie
+//                 is set, the app builds the URL directly as
+//                 `/lessons/<cookie-value>.json` and loads it. The lesson
+//                 picker is only shown when there is no cookie, or when
+//                 the direct fetch fails.
+// App.jsx - NEW: "Hide alerts" checkbox in Settings, placed right after the
+//                 "Display Options" section. Default is CHECKED (true).
+//                 When checked, informational alerts are suppressed via a
+//                 `notify()` helper that becomes a no-op. Session completion
+//                 reports and error conditions are NOT suppressed — they use
+//                 a separate `report()` helper / raw alert() respectively,
+//                 because they carry results or actionable failures.
+// App.jsx - FIXED: Session completion reports are no longer routed through
+//                 `notify()`. They now use `report()`, which always shows
+//                 the modal regardless of the `hideAlerts` setting.
+// App.jsx - NEW: "Invisible Top bar" checkbox in Settings → Display Options,
+//                 placed right after "Load lesson locally". Default is
+//                 UNCHECKED. When checked, the root <div class="app"> also
+//                 carries the `invisible-top-bar` class, and App.css makes
+//                 the top bar fully transparent (background and bottom
+//                 border). When unchecked, the top bar uses the default
+//                 `#484348a8` background (or white in light theme).
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -133,6 +161,46 @@ const LISTEN_MIN_MS = 2500;
 // Voice-group language prefixes
 const ENGLISH_LANG_PREFIXES = ['en-gb', 'en-us', 'en-au'];
 const RUSSIAN_LANG_PREFIXES = ['ru-ru'];
+
+// Cookie used to persist the DB file name across page refreshes.
+const DB_FILENAME_COOKIE = 'ecoCards.dbFileName';
+const DB_FILENAME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year, in seconds
+
+// =============================================================
+// Cookie helpers
+// =============================================================
+const setCookie = (name, value, maxAgeSeconds) => {
+  if (typeof document === 'undefined') return;
+  const encoded = encodeURIComponent(value ?? '');
+  const parts = [
+    `${name}=${encoded}`,
+    'path=/',
+    'SameSite=Lax',
+  ];
+  if (typeof maxAgeSeconds === 'number') {
+    parts.push(`max-age=${maxAgeSeconds}`);
+  }
+  document.cookie = parts.join('; ');
+};
+
+const getCookie = (name) => {
+  if (typeof document === 'undefined') return '';
+  const prefix = name + '=';
+  const found = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(prefix));
+  if (!found) return '';
+  try {
+    return decodeURIComponent(found.slice(prefix.length));
+  } catch (_) {
+    return '';
+  }
+};
+
+const deleteCookie = (name) => {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=; path=/; SameSite=Lax; max-age=0`;
+};
 
 // =============================================================
 // Utilities
@@ -298,7 +366,11 @@ const buildVoicesLoadedMessage = (voices) => {
 // =============================================================
 const App = () => {
   const [dbLoaded, setDbLoaded] = useState(false);
-  const [dbFileName, setDbFileName] = useState("");
+  // Seed the DB file name from the cookie so the pill shows the last
+  // known name immediately, even before a real DB is loaded.
+  const [dbFileName, setDbFileName] = useState(() => {
+    try { return getCookie(DB_FILENAME_COOKIE) || ''; } catch (_) { return ''; }
+  });
   const [currentRecord, setCurrentRecord] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -329,6 +401,11 @@ const App = () => {
   // Tracks whether nav-repeat mode is currently active (for UI mirroring).
   const [navRepeatActive, setNavRepeatActive] = useState(false);
 
+  // Flipped to true once the on-mount load decision (auto-load from cookie
+  // vs. open the picker) has fully resolved. The pill stays disabled until
+  // then so an early click cannot race the auto-load.
+  const [initialLoadResolved, setInitialLoadResolved] = useState(false);
+
   const displayInfo = useDisplayInfo();
 
   const [settings, setSettings] = useState({
@@ -354,6 +431,8 @@ const App = () => {
     randomOrder: false,
     repeatAfterMe: false,
     repeatOnWordsNotEqual: false,   // default is UNCHECKED
+    hideAlerts: true,               // default is CHECKED
+    invisibleTopBar: false,         // default is UNCHECKED
   });
 
   const singularSvgRef = useRef(null);
@@ -411,6 +490,12 @@ const App = () => {
   const pronounceAndMaybeListenRef = useRef(null);
   const finishNavRepeatRef = useRef(null);
 
+  // Guards so the on-mount decision runs exactly once per page load.
+  const initialAutoLoadAttemptedRef = useRef(false);
+  // Mirrors `initialLoadResolved` state into a ref so `loadDatabase` (which
+  // is a useCallback and doesn't re-create on state change) can read it.
+  const initialLoadResolvedRef = useRef(false);
+
   // Ref to the top bar DOM node so we can measure it.
   const topBarRef = useRef(null);
 
@@ -440,6 +525,20 @@ const App = () => {
       synthRef.current = window.speechSynthesis;
     }
   }, []);
+
+  // Keep the ref in sync with the state used to gate the pill.
+  useEffect(() => {
+    initialLoadResolvedRef.current = initialLoadResolved;
+  }, [initialLoadResolved]);
+
+  // ---- Persist the DB file name in a cookie whenever it changes ----
+  useEffect(() => {
+    if (dbFileName) {
+      setCookie(DB_FILENAME_COOKIE, dbFileName, DB_FILENAME_COOKIE_MAX_AGE);
+    } else {
+      deleteCookie(DB_FILENAME_COOKIE);
+    }
+  }, [dbFileName]);
 
   // ---- Measure the actual rendered height of the top bar ----
   useEffect(() => {
@@ -473,13 +572,27 @@ const App = () => {
     };
   }, []);
 
+  // =========================================================
+  // On-mount decision:
+  //   • Read the cookie `ecoCards.dbFileName`.
+  //   • If it exists, build the URL directly as
+  //         /lessons/<cookie-value>.json
+  //     and load it — WITHOUT consulting the lessons index first.
+  //   • If there is no cookie, OR the direct fetch fails, open the
+  //     "📂 Choose a lesson" modal.
+  // =========================================================
   useEffect(() => {
-    const url = LESSONS_INDEX_URL;
     let cancelled = false;
+
+    const resolveInitialLoad = () => {
+      initialLoadResolvedRef.current = true;
+      setInitialLoadResolved(true);
+    };
+
+    // Fire-and-forget: populate the picker list in the background.
     setIsLoadingLessonsList(true);
     setLessonsListError('');
-
-    fetch(url, { headers: { Accept: 'application/json' } })
+    fetch(LESSONS_INDEX_URL, { headers: { Accept: 'application/json' } })
       .then((res) => {
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         return res.json();
@@ -488,9 +601,6 @@ const App = () => {
         if (cancelled) return;
         const list = Array.isArray(data?.lessons) ? data.lessons : [];
         setLessonsList(list);
-        if (!settingsRef.current.selectedLessonFile && list.length > 0) {
-          setSettings((prev) => ({ ...prev, selectedLessonFile: list[0].file }));
-        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -501,7 +611,51 @@ const App = () => {
         if (!cancelled) setIsLoadingLessonsList(false);
       });
 
+    // Only decide once per page load (StrictMode double-invokes in dev).
+    if (initialAutoLoadAttemptedRef.current) {
+      return () => { cancelled = true; };
+    }
+    initialAutoLoadAttemptedRef.current = true;
+
+    const remembered = (getCookie(DB_FILENAME_COOKIE) || '').trim();
+
+    // --- Local-file mode: cannot auto-restore a user-picked File.
+    if (settingsRef.current.loadLessonLocally) {
+      if (remembered) {
+        setSettings((prev) => ({
+          ...prev,
+          selectedLessonFile: prev.selectedLessonFile || remembered,
+        }));
+      }
+      resolveInitialLoad();
+      return () => { cancelled = true; };
+    }
+
+    // --- Server mode with NO cookie → open the picker.
+    if (!remembered) {
+      setIsLessonPickerOpen(true);
+      resolveInitialLoad();
+      return () => { cancelled = true; };
+    }
+
+    // --- Server mode WITH a cookie → build the URL directly and load.
+    const fileName = /\.(json|dbms)$/i.test(remembered)
+      ? remembered
+      : `${remembered}.json`;
+
+    setSettings((prev) => ({ ...prev, selectedLessonFile: fileName }));
+
+    loadDatabaseFromServer(fileName)
+      .then(() => {
+        resolveInitialLoad();
+      })
+      .catch(() => {
+        setIsLessonPickerOpen(true);
+        resolveInitialLoad();
+      });
+
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isSpeechSupported = () =>
@@ -509,6 +663,20 @@ const App = () => {
 
   const isRepeatCycleActive = () =>
     isStudyingRef.current || navRepeatActiveRef.current;
+
+  // Suppressible informational alert. Uses `settingsRef.current.hideAlerts`
+  // so it always sees the latest value, even inside stale closures.
+  const notify = (message) => {
+    if (settingsRef.current.hideAlerts) return;
+    alert(message);
+  };
+
+  // Always-shown modal, used for session *results*. Not affected by
+  // `hideAlerts`, because results are the output of the operation the user
+  // asked for, not a transient notification about it.
+  const report = (message) => {
+    alert(message);
+  };
 
   const cancelAllSpeech = () => {
     speechGenerationRef.current++;
@@ -550,8 +718,6 @@ const App = () => {
     const englishVoices = filterVoicesByLangPrefixes(voices, ENGLISH_LANG_PREFIXES);
     const russianVoices = filterVoicesByLangPrefixes(voices, RUSSIAN_LANG_PREFIXES);
 
-    // Read current selections from settingsRef so we don't clobber a choice
-    // the user already made (or a value restored from a saved settings file).
     const currentSelected = settingsRef.current.selectedVoiceName || "";
     const currentTranslation = settingsRef.current.translationVoiceName || "";
 
@@ -568,14 +734,12 @@ const App = () => {
       }));
     }
 
-    // Prime the cached voice so the first utterance does not have to
-    // search the list again.
     if (nextSelectedVoiceName) {
       const v = voices.find(x => x.name === nextSelectedVoiceName);
       if (v) cachedVoiceRef.current = v;
     }
 
-    alert(buildVoicesLoadedMessage(voices));
+    notify(buildVoicesLoadedMessage(voices));
   };
 
   const loadVoices = () => {
@@ -784,10 +948,7 @@ const App = () => {
     });
     setLastRecognized('');
 
-    // Snapshot the current transcript length so the transcript effect can
-    // ignore stale content from previous attempts.
     transcriptBaselineRef.current = (transcript || '').length;
-    // Start the minimum-window clock.
     listenStartedAtRef.current = Date.now();
 
     try {
@@ -1038,15 +1199,16 @@ const App = () => {
           return `${i + 1}. ${entry.word} -${heard}`;
         });
 
-        alert(
+        // Session result: shown even when hideAlerts is on.
+        report(
           `🎉 Repeat After Me session completed!\n\n` +
           `Not passed ${failed.length} card(s):\n` +
           lines.join('\n')
         );
       } else if (settingsRef.current.repeatAfterMe) {
-        alert('🎉 Repeat After Me session completed!\n\nAll cards passed!');
+        report('🎉 Repeat After Me session completed!\n\nAll cards passed!');
       } else {
-        alert('🎉 Study session completed! Well done!');
+        report('🎉 Study session completed! Well done!');
       }
 
       failedCardsRef.current = [];
@@ -1186,32 +1348,17 @@ const App = () => {
   }, []);
 
   // ---- Transcript handling ----
-  // The engine runs in `continuous: true` mode and we do not reset the
-  // transcript between attempts. To avoid showing stale words from
-  // previous attempts, we slice the transcript at the baseline snapshot
-  // taken when the mic opened for THIS attempt. Only the new content
-  // (the current attempt's utterance) is used for display and comparison.
-  //
-  // Two guards ensure the user always has time to pronounce the word:
-  //   1. Ignore transcript content that was already there before the mic
-  //      opened for this attempt (transcriptBaselineRef).
-  //   2. Refuse to close the mic before LISTEN_MIN_MS has elapsed since
-  //      the mic opened (listenStartedAtRef).
   useEffect(() => {
     if (!isListeningForRepeat) return;
     if (!transcript || transcript.trim() === '') return;
-
-    // Guard 1: ignore stale transcript content from previous attempts.
     if (transcript.length <= transcriptBaselineRef.current) return;
 
-    // Guard 2: respect the minimum listening window.
     const elapsed = Date.now() - listenStartedAtRef.current;
     const remaining = Math.max(0, LISTEN_MIN_MS - elapsed);
 
     const handle = setTimeout(() => {
       const expected = expectedWordRef.current;
       const spoken = transcript;
-      // Only use what was said AFTER this attempt's mic opened.
       const wordsSinceBaseline = spoken.slice(transcriptBaselineRef.current);
       const chunk = lastWords(wordsSinceBaseline, TRANSCRIPT_CHUNK_WORDS);
       const cleaned = stripTrailingPunctuation(chunk);
@@ -1355,6 +1502,8 @@ const App = () => {
     randomOrder: { type: 'boolean', default: true },
     repeatAfterMe: { type: 'boolean', default: false },
     repeatOnWordsNotEqual: { type: 'boolean', default: false }, // default UNCHECKED
+    hideAlerts: { type: 'boolean', default: true },              // default CHECKED
+    invisibleTopBar: { type: 'boolean', default: false },        // default UNCHECKED
   };
 
   const validateSettings = (raw) => {
@@ -1416,7 +1565,7 @@ const App = () => {
             rejected.map((r) => `• ${r}`).join('\n')
           );
         } else {
-          alert('✅ Settings loaded successfully!');
+          notify('✅ Settings loaded successfully!');
         }
       } catch (err) { alert('❌ Failed to parse settings file.'); }
     };
@@ -1447,7 +1596,7 @@ const App = () => {
         const writable = await fileHandle.createWritable();
         await writable.write(blob);
         await writable.close();
-        alert('Settings saved successfully!');
+        notify('Settings saved successfully!');
         closeSettings();
         return;
       } catch (err) {
@@ -1463,7 +1612,7 @@ const App = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    alert('Settings saved successfully!');
+    notify('Settings saved successfully!');
     closeSettings();
   };
 
@@ -1541,7 +1690,7 @@ const App = () => {
       } else {
         modeMsg = `⏱️ Timer mode: ${settings.studyTime} seconds per card\n🔇 Auto-pronunciation disabled${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
       }
-      alert(`📖 Study session started!\n\n${modeMsg}`);
+      notify(`📖 Study session started!\n\n${modeMsg}`);
     }
   };
 
@@ -1690,7 +1839,11 @@ const App = () => {
     setCurrentRecord(convertedRecords[0]);
     setActiveCard('singular');
     setDbLoaded(true);
-    setDbFileName(importedData.name || sourceName);
+
+    const cleanSourceName = String(sourceName || '')
+      .replace(/\.(json|dbms)$/i, '')
+      .trim();
+    setDbFileName(cleanSourceName || importedData.name || '');
 
     setCardPulsing('singular', false);
     setCardPulsing('plural', false);
@@ -1716,7 +1869,7 @@ const App = () => {
         const contents = await file.text();
         const importedData = JSON.parse(contents);
         applyDatabasePayload(importedData, file.name.replace(/\.(json|dbms)$/, ''));
-        alert(`✅ Database loaded successfully!\n\nFile: ${file.name}`);
+        notify(`✅ Database loaded successfully!\n\nFile: ${file.name}`);
       } catch (error) {
         alert(`❌ Failed to load database\n\nError: ${error.message}`);
         setDbLoaded(false);
@@ -1735,7 +1888,7 @@ const App = () => {
 
     if (!file) {
       alert('⚠️ No lesson selected.\n\nPlease pick a lesson from the list, or enable "Load lesson locally" to pick a file from your device.');
-      return;
+      throw new Error('No lesson selected');
     }
 
     const baseDir = indexUrl.replace(/[^/]*$/, '');
@@ -1764,12 +1917,15 @@ const App = () => {
       setIsLessonPickerOpen(false);
     } catch (err) {
       alert(`❌ Failed to load lesson\n\n${err.message}`);
+      throw err;
     } finally {
       setIsLoading(false);
     }
   }, [applyDatabasePayload, stopStudyTimer, cancelRepeatCycle, cancelAllSpeech, stopRepeatListening]);
 
   const loadDatabase = useCallback(() => {
+    if (!initialLoadResolvedRef.current) return;
+
     if (settingsRef.current.loadLessonLocally) {
       loadDatabaseFromFile();
     } else {
@@ -1780,7 +1936,7 @@ const App = () => {
   const handlePickLesson = useCallback((file) => {
     if (!file) return;
     setIsLessonPickerOpen(false);
-    loadDatabaseFromServer(file);
+    loadDatabaseFromServer(file).catch(() => { /* alert already shown */ });
   }, [loadDatabaseFromServer]);
 
   const nextRecord = () => {
@@ -1829,7 +1985,6 @@ const App = () => {
     }
     if (!word || word.trim() === '') return;
 
-    // ---- Repeat-after-me branch ----
     if (settings.repeatAfterMe) {
       if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
         cancelRepeatCycle();
@@ -1841,8 +1996,6 @@ const App = () => {
       return;
     }
 
-    // ---- Normal (navigation) branch ----
-    // Toggle: clicking an already-pulsing card stops its pronunciation + pulse.
     if (manualPulseCard === cardType) {
       cancelAllSpeech();
       setCardPulsing(cardType, false);
@@ -1895,9 +2048,9 @@ const App = () => {
     'app',
     !settings.showTranscription ? 'hide-transcription' : '',
     !settings.showTranslation ? 'hide-translation' : '',
+    settings.invisibleTopBar ? 'invisible-top-bar' : '',
   ].filter(Boolean).join(' ');
 
-  // ---- Auto-align computation ----------------------------------
   const viewportW = displayInfo
     ? (displayInfo.viewportClientWidth || displayInfo.viewportCssWidth || 0)
     : 0;
@@ -2025,7 +2178,12 @@ const App = () => {
               type="button"
               className={`header-db-info header-db-info-button ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
               onClick={loadDatabase}
-              disabled={isLoading || isStudying || navRepeatActive}
+              disabled={
+                isLoading ||
+                isStudying ||
+                navRepeatActive ||
+                (!initialLoadResolved && !settings.loadLessonLocally)
+              }
               aria-live="polite"
               aria-atomic="true"
               aria-label={
@@ -2418,6 +2576,10 @@ const App = () => {
                   <label><input type="checkbox" checked={settings.loadLessonLocally}
                     onChange={(e) => handleSettingChange('loadLessonLocally', e.target.checked)} /> Load lesson locally</label>
                 </div>
+                <div className="setting-item checkbox">
+                  <label><input type="checkbox" checked={settings.invisibleTopBar}
+                    onChange={(e) => handleSettingChange('invisibleTopBar', e.target.checked)} /> Invisible Top bar</label>
+                </div>
 
                 {displayInfo && (
                   <div
@@ -2481,6 +2643,25 @@ const App = () => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div className="settings-section">
+                <h3>Alerts</h3>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.hideAlerts}
+                      onChange={(e) => handleSettingChange('hideAlerts', e.target.checked)}
+                    />
+                    Hide alerts
+                  </label>
+                </div>
+                <div className="setting-item">
+                  <small style={{ color: '#aaa', fontSize: '0.7rem' }}>
+                    When checked, informational popups are suppressed. Session results and errors are still shown.
+                  </small>
+                </div>
               </div>
 
               <div className="settings-section">

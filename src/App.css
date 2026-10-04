@@ -37,6 +37,10 @@
    - NEW: When the status pill button is disabled, its leading 🌐 / 📁 icon
           is hidden (aria-hidden anyway), leaving only the meaningful state
           text inside the pill.
+   - NEW: ".app.invisible-top-bar .top-bar" makes the top bar transparent
+          (and clears its bottom border) when the "Invisible Top bar"
+          checkbox is enabled in Settings → Display Options. Applies to
+          both dark and light themes.
 */
 
 /* ============================================================
@@ -1190,4 +1194,23 @@ body.light .active-pulse {
   width: var(--card-width);
   flex: 0 0 var(--card-width);
   max-width: none;
+}
+
+/* ============================================================
+   INVISIBLE TOP BAR
+   When the app root carries .invisible-top-bar, the top bar
+   becomes fully transparent (so the page background shows
+   through). When the flag is off, the base .top-bar rule
+   applies the default #484348a8 background.
+   ============================================================ */
+.app.invisible-top-bar .top-bar {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Keep the light-theme override from re-applying a visible
+   white bar when the flag is on. */
+body.light .app.invisible-top-bar .top-bar {
+  background: transparent;
+  border-bottom-color: transparent;
 }
