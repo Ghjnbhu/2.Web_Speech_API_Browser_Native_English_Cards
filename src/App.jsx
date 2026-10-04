@@ -122,12 +122,19 @@
 //                 `notify()`. They now use `report()`, which always shows
 //                 the modal regardless of the `hideAlerts` setting.
 // App.jsx - NEW: "Invisible Top bar" checkbox in Settings → Display Options,
-//                 placed right after "Load lesson locally". Default is
-//                 UNCHECKED. When checked, the root <div class="app"> also
+//                 placed right after "Load lesson locally". Default is now
+//                 CHECKED. When checked, the root <div class="app"> also
 //                 carries the `invisible-top-bar` class, and App.css makes
 //                 the top bar fully transparent (background and bottom
 //                 border). When unchecked, the top bar uses the default
 //                 `#484348a8` background (or white in light theme).
+// App.jsx - CHANGED: The vertical gap between the top bar and the cards row
+//                 is now a fixed 5 px (TOP_BAR_GAP_PX), independent from the
+//                 other gaps. The gap between cards, the bottom gap, and the
+//                 left/right inset keep using settings.cardGap. Implemented
+//                 by setting topGap = TOP_BAR_GAP_PX inside the auto-align
+//                 block; topGap already drives both the --landscape-top-gap
+//                 CSS variable and the card-height math, so both stay in sync.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -142,6 +149,11 @@ const LESSONS_INDEX_URL = '/lessons/index.json';
 const AUTO_H_PADDING  = 24;
 const MIN_CARD_WIDTH  = 180;
 const MIN_CARD_HEIGHT = 180;
+
+// Vertical space between the top bar and the cards row.
+// Used ONLY for the top gap; the inter-card gap, the bottom gap,
+// and the side inset keep using settings.cardGap.
+const TOP_BAR_GAP_PX = 5;
 
 // Fallback top bar heights (used only until the observer reports a real value)
 const TOP_BAR_HEIGHT_LANDSCAPE = 52;
@@ -432,7 +444,7 @@ const App = () => {
     repeatAfterMe: false,
     repeatOnWordsNotEqual: false,   // default is UNCHECKED
     hideAlerts: true,               // default is CHECKED
-    invisibleTopBar: false,         // default is UNCHECKED
+    invisibleTopBar: true,          // default is CHECKED
   });
 
   const singularSvgRef = useRef(null);
@@ -1503,7 +1515,7 @@ const App = () => {
     repeatAfterMe: { type: 'boolean', default: false },
     repeatOnWordsNotEqual: { type: 'boolean', default: false }, // default UNCHECKED
     hideAlerts: { type: 'boolean', default: true },              // default CHECKED
-    invisibleTopBar: { type: 'boolean', default: false },        // default UNCHECKED
+    invisibleTopBar: { type: 'boolean', default: true },         // default CHECKED
   };
 
   const validateSettings = (raw) => {
@@ -2085,7 +2097,7 @@ const App = () => {
 
   if (settings.autoAlign && viewportW > 0) {
     effectiveGap = autoGap;
-    topGap = autoGap;
+    topGap = TOP_BAR_GAP_PX;
     bottomGap = autoGap;
     sideInset = autoGap;
 
