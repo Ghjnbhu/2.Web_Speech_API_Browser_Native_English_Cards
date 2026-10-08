@@ -59,10 +59,10 @@
 //                 to UNCHECKED (false).
 // App.jsx - DEFAULT: when "🎤 Repeat after me" is enabled, "Attempt:" is
 //                 forced to 1 (repeatTimes = 1).
-// App.jsx - FIX 1: SpeechRecognition.startListening now uses continuous: true
+// App.jsx - FIX #1: SpeechRecognition.startListening now uses continuous: true
 //                 so the engine keeps context across attempts, improving
 //                 recognition of minimal-pair words (e.g. "Bean" vs "Bin").
-// App.jsx - FIX 3: The transcript is no longer reset per attempt. Each
+// App.jsx - FIX #3: The transcript is no longer reset per attempt. Each
 //                 attempt now compares the expected word against the LAST
 //                 CHUNK of the accumulated transcript (last N words),
 //                 which preserves the engine's context window.
@@ -135,6 +135,12 @@
 //                 by setting topGap = TOP_BAR_GAP_PX inside the auto-align
 //                 block; topGap already drives both the --landscape-top-gap
 //                 CSS variable and the card-height math, so both stay in sync.
+// App.jsx - FIXED (Option A): SVG sanitizer now ALLOWS <image> tags whose
+//                 href is a safe inline data:image/*;base64 URI. External
+//                 URLs (http/file/javascript/data:text/html) are still
+//                 dropped. This lets base64-embedded PNG/JPEG/GIF/WebP/BMP/
+//                 ICO/SVG images inside lesson SVGs render, while keeping
+//                 the same XSS posture as before.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -1706,14 +1712,32 @@ const App = () => {
     }
   };
 
+  // =============================================================
+  // SVG sanitization (Option A: allow safe inline data:image/*)
+  // =============================================================
+  //
+  // `image` is intentionally NOT in the always-strip list anymore. We
+  // now allow <image> only when its href is a base64-encoded data URI of
+  // a known safe raster/vector image type. External URLs (http, https,
+  // file, ftp, javascript:, data:text/html, etc.) are still dropped.
+  //
+  // If you want to also forbid inline SVG data URIs (paranoid mode),
+  // remove `svg\+xml|` from SAFE_DATA_IMAGE_RE below.
   const DANGEROUS_SVG_TAGS = [
     'script', 'foreignObject', 'iframe', 'object', 'embed',
-    'audio', 'video', 'source', 'track', 'image',
+    'audio', 'video', 'source', 'track',
     'animate', 'set', 'handler', 'listener',
   ];
   const DANGEROUS_ATTR_PREFIXES = ['on'];
   const DANGEROUS_ATTR_NAMES = ['src', 'data', 'formaction', 'action'];
   const isSafeInternalReference = (value) => /^#[A-Za-z_][\w:.-]*$/.test(value.trim());
+
+  // Allow only inline, base64-encoded image data URIs.
+  const SAFE_DATA_IMAGE_RE =
+    /^data:image\/(png|jpe?g|gif|webp|bmp|x-icon|vnd\.microsoft\.icon|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/i;
+
+  const isSafeDataImage = (value) =>
+    typeof value === 'string' && SAFE_DATA_IMAGE_RE.test(value.trim());
 
   const sanitizeSvgString = (rawSvg) => {
     const parser = new DOMParser();
@@ -1722,35 +1746,83 @@ const App = () => {
     const svgEl = doc.documentElement;
     if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') return null;
 
-    DANGEROUS_SVG_TAGS.forEach((tag) => doc.querySelectorAll(tag).forEach(el => el.remove()));
+    // 1. Remove always-dangerous tags.
+    DANGEROUS_SVG_TAGS.forEach((tag) =>
+      doc.querySelectorAll(tag).forEach((el) => el.remove())
+    );
+
+    // 2. <use> must point to an internal fragment (#id) only.
     doc.querySelectorAll('use').forEach((useEl) => {
-      const href = useEl.getAttribute('href') || useEl.getAttribute('xlink:href') || '';
+      const href =
+        useEl.getAttribute('href') ||
+        useEl.getAttribute('xlink:href') ||
+        '';
       if (!isSafeInternalReference(href)) useEl.remove();
     });
 
+    // 3. <image> is allowed ONLY when its href is a safe inline data:image/*.
+    doc.querySelectorAll('image').forEach((imgEl) => {
+      const href =
+        imgEl.getAttribute('href') ||
+        imgEl.getAttribute('xlink:href') ||
+        '';
+      if (!isSafeDataImage(href)) imgEl.remove();
+    });
+
+    // 4. Per-attribute scrub.
     [svgEl, ...doc.querySelectorAll('*')].forEach((el) => {
       const attrsToRemove = [];
       const tagName = el.tagName.toLowerCase();
+
       Array.from(el.attributes).forEach((attr) => {
         const name = attr.name.toLowerCase();
         const value = (attr.value || '').trim();
-        if (DANGEROUS_ATTR_PREFIXES.some(p => name.startsWith(p))) { attrsToRemove.push(attr.name); return; }
+
+        // on* event handlers
+        if (DANGEROUS_ATTR_PREFIXES.some((p) => name.startsWith(p))) {
+          attrsToRemove.push(attr.name);
+          return;
+        }
+
+        // href / xlink:href
         if (name === 'href' || name === 'xlink:href') {
-          if (tagName === 'use') return;
+          if (tagName === 'use') return;            // already validated above
+          if (tagName === 'image') {                // already validated above
+            if (isSafeDataImage(value)) return;
+            attrsToRemove.push(attr.name);
+            return;
+          }
+          // any other element: only internal #id references allowed
           if (!isSafeInternalReference(value)) attrsToRemove.push(attr.name);
           return;
         }
+
+        // src / data / formaction / action — block javascript:, data:, vbscript:
         if (DANGEROUS_ATTR_NAMES.includes(name)) {
-          if (/^\s*(javascript|data|vbscript):/i.test(value)) attrsToRemove.push(attr.name);
+          if (/^\s*(javascript|data|vbscript):/i.test(value)) {
+            attrsToRemove.push(attr.name);
+          }
           return;
         }
-        if (name === 'style' && /url\s*\(\s*['"]?\s*javascript:/i.test(value)) attrsToRemove.push(attr.name);
+
+        // style="... url(javascript:...)"
+        if (
+          name === 'style' &&
+          /url\s*\(\s*['"]?\s*javascript:/i.test(value)
+        ) {
+          attrsToRemove.push(attr.name);
+        }
       });
-      attrsToRemove.forEach(a => el.removeAttribute(a));
+
+      attrsToRemove.forEach((a) => el.removeAttribute(a));
     });
 
+    // 5. Neutralize @import inside <style>.
     doc.querySelectorAll('style').forEach((styleEl) => {
-      styleEl.textContent = (styleEl.textContent || '').replace(/@import[^;]+;/gi, '');
+      styleEl.textContent = (styleEl.textContent || '').replace(
+        /@import[^;]+;/gi,
+        ''
+      );
     });
 
     return svgEl;
