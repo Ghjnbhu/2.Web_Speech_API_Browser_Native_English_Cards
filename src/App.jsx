@@ -159,6 +159,14 @@
 //     repeat-after-me is on; the "(not used in repeat-after-me mode)"
 //     hint has been removed, and the mode message in handleMainAction
 //     now reflects the actual behaviour.
+// App.jsx - NEW: Translation strings are now split by script when spoken.
+//   Latin-script runs (English letters, digits, common Latin punctuation)
+//   inside a translation are pronounced with the "Select Voice" voice,
+//   while the remaining (non-Latin) runs keep using the "Translation
+//   Voice" voice. Runs are spoken in order, chained so each one starts
+//   only after the previous finishes. This applies to every translation
+//   path: wordless cards, word+translation cards, and the repeat-after-me
+//   success flow.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -298,6 +306,49 @@ const lastWords = (text, n) => {
   const words = String(text).trim().split(/\s+/).filter(Boolean);
   if (words.length <= n) return words.join(' ');
   return words.slice(-n).join(' ');
+};
+
+// -------------------------------------------------------------
+// Script splitting for translations.
+// We split a translation string into runs of Latin-script characters
+// and everything else, so Latin runs can be spoken with the "Select
+// Voice" voice and the rest with the "Translation Voice".
+// -------------------------------------------------------------
+const isLatinChar = (ch) => /[A-Za-z\u00C0-\u024F]/.test(ch);
+
+const splitTranslationByScript = (text) => {
+  if (!text) return [];
+  const segments = [];
+  let current = '';
+  let currentIsLatin = null;
+
+  const flush = () => {
+    if (current.length === 0) return;
+    segments.push({ text: current, isLatin: !!currentIsLatin });
+    current = '';
+    currentIsLatin = null;
+  };
+
+  for (const ch of String(text)) {
+    if (isLatinChar(ch)) {
+      if (currentIsLatin === false) flush();
+      currentIsLatin = true;
+      current += ch;
+    } else if (/\s/.test(ch) || /[.,!?;:'"()\[\]{}\-–—…«»0-9]/.test(ch)) {
+      // Whitespace or neutral punctuation/digits: keep with whatever
+      // script we're currently in.
+      if (currentIsLatin === null) currentIsLatin = false;
+      current += ch;
+    } else {
+      // Non-Latin, non-neutral character (Cyrillic, Armenian, CJK, …).
+      if (currentIsLatin === true) flush();
+      currentIsLatin = false;
+      current += ch;
+    }
+  }
+  flush();
+
+  return segments.filter((s) => s.text.trim() !== '');
 };
 
 const readDisplayInfo = () => {
@@ -969,6 +1020,43 @@ const App = () => {
 
   useEffect(() => { speakTextRef.current = speakText; });
 
+  // -------------------------------------------------------------
+  // speakTranslationSmart
+  // Speak a translation string, routing Latin-script segments through
+  // the "Select Voice" voice and everything else through the
+  // "Translation Voice". Segments are spoken in order.
+  // -------------------------------------------------------------
+  const speakTranslationSmart = useCallback((text, onComplete = null) => {
+    if (!text || String(text).trim() === '') { if (onComplete) onComplete(); return; }
+
+    const segments = splitTranslationByScript(text);
+    if (segments.length === 0) { if (onComplete) onComplete(); return; }
+
+    const s = settingsRef.current;
+    const selectedVoiceName = s.selectedVoiceName || null;
+    const translationVoiceName = s.translationVoiceName || null;
+    const repeats = Math.max(1, s.translationRepeatTimes || 1);
+
+    if (segments.length === 1) {
+      const seg = segments[0];
+      const voiceName = seg.isLatin ? selectedVoiceName : translationVoiceName;
+      speakTextRef.current(seg.text, onComplete, voiceName, repeats);
+      return;
+    }
+
+    let idx = 0;
+    const speakNext = () => {
+      if (idx >= segments.length) {
+        if (onComplete) onComplete();
+        return;
+      }
+      const seg = segments[idx++];
+      const voiceName = seg.isLatin ? selectedVoiceName : translationVoiceName;
+      speakTextRef.current(seg.text, speakNext, voiceName, repeats);
+    };
+    speakNext();
+  }, []);
+
   const startRepeatListening = useCallback((expectedWord) => {
     if (typeof SpeechRecognitionLib?.startListening !== 'function') {
       console.error('[Repeat] SpeechRecognitionLib.startListening is not available.');
@@ -1022,8 +1110,8 @@ const App = () => {
   // speakTranslationThenDone
   // In repeat-after-me mode: called after a MATCHED attempt (final one
   // for that word) OR for a wordless card with a translation. Speaks the
-  // translation once (if enabled), then advances the study / finishes
-  // the nav-repeat cycle.
+  // translation (script-aware), then advances the study / finishes the
+  // nav-repeat cycle.
   // ------------------------------------------------------------
   const speakTranslationThenDone = useCallback((translation) => {
     const step = () => {
@@ -1040,26 +1128,11 @@ const App = () => {
 
     if (!hasTranslation) { step(); return; }
 
-    const effectiveTranslationVoiceName =
-      (settingsRef.current.translationVoiceName || '').trim() !== ''
-        ? settingsRef.current.translationVoiceName
-        : (settingsRef.current.selectedVoiceName || null);
-
-    const voice = getCurrentVoice(effectiveTranslationVoiceName);
-    if (!voice) { step(); return; }
-
-    const repeats = Math.max(1, settingsRef.current.translationRepeatTimes || 1);
-
-    speakTextRef.current(
-      translation,
-      () => {
-        if (!isRepeatCycleActive()) return;
-        step();
-      },
-      effectiveTranslationVoiceName,
-      repeats
-    );
-  }, []);
+    speakTranslationSmart(translation, () => {
+      if (!isRepeatCycleActive()) return;
+      step();
+    });
+  }, [speakTranslationSmart]);
 
   useEffect(() => {
     speakTranslationThenDoneRef.current = speakTranslationThenDone;
@@ -1124,9 +1197,9 @@ const App = () => {
   // Auto Study (isStudying=true, repeat-after-me off): word → (translation)
   // → advance. A wordless card with only a translation speaks the
   // translation and then advances.
-  // Repeat-after-me: word → mic listen → on MATCH speak the translation,
-  // then advance. Wordless cards speak the translation (if enabled) and
-  // advance without opening the mic.
+  // Repeat-after-me: word → mic listen → on MATCH speak the translation
+  // (script-aware), then advance. Wordless cards speak the translation
+  // (if enabled) and advance without opening the mic.
   // ============================================================
   const pronounceAndMaybeListen = (cardType, index, record) => {
     if (!settings.autoPronounce) return;
@@ -1155,14 +1228,7 @@ const App = () => {
     currentTranslationRef.current = translation;
 
     const repeatAfterMe = settings.repeatAfterMe;
-    const translationRepeatTimes = Math.max(1, settings.translationRepeatTimes || 1);
-    const rawTranslationVoiceName = settings.translationVoiceName;
-    const selectedVoiceName = settings.selectedVoiceName;
     const totalRepeats = Math.max(1, settings.repeatTimes || 1);
-    const effectiveTranslationVoiceName =
-      (rawTranslationVoiceName && rawTranslationVoiceName.trim() !== '')
-        ? rawTranslationVoiceName
-        : (selectedVoiceName || null);
 
     totalRepeatsRef.current = totalRepeats;
 
@@ -1184,20 +1250,10 @@ const App = () => {
 
     // --- Wordless card → speak only the translation, then advance ---
     if (!hasWord) {
-      const translationVoice = getCurrentVoice(effectiveTranslationVoiceName);
-      if (translationVoice) {
-        speakTextRef.current(
-          translation,
-          () => {
-            if (!isStudyingRef.current) return;
-            setTimeout(() => moveToNextCardInStudy(), 300);
-          },
-          effectiveTranslationVoiceName,
-          translationRepeatTimes
-        );
-      } else {
+      speakTranslationSmart(translation, () => {
+        if (!isStudyingRef.current) return;
         setTimeout(() => moveToNextCardInStudy(), 300);
-      }
+      });
       return;
     }
 
@@ -1207,20 +1263,10 @@ const App = () => {
         if (!isStudyingRef.current) return;
         setTimeout(() => {
           if (!isStudyingRef.current) return;
-          const translationVoice = getCurrentVoice(effectiveTranslationVoiceName);
-          if (translationVoice) {
-            speakTextRef.current(
-              translation,
-              () => {
-                if (!isStudyingRef.current) return;
-                setTimeout(() => moveToNextCardInStudy(), 300);
-              },
-              effectiveTranslationVoiceName,
-              translationRepeatTimes
-            );
-          } else {
+          speakTranslationSmart(translation, () => {
+            if (!isStudyingRef.current) return;
             setTimeout(() => moveToNextCardInStudy(), 300);
-          }
+          });
         }, 400);
       });
     } else {
@@ -1529,7 +1575,7 @@ const App = () => {
             setRepeatStatus('');
             setRepeatProgress({ current: 0, total: 0 });
             // After the last MATCHED attempt, speak the translation
-            // (if enabled), then advance / finish the cycle.
+            // (script-aware), then advance / finish the cycle.
             speakTranslationThenDoneRef.current?.(currentTranslationRef.current || '');
           }, 700);
         } else {
@@ -2192,6 +2238,7 @@ const App = () => {
   // Repeat-after-me: word → mic listen → on match translation spoken
   // by the transcript effect. Wordless card with a translation:
   // speak the translation and end any active nav-repeat cycle.
+  // Translations are spoken script-aware (see speakTranslationSmart).
   // ============================================================
   const handleCardClick = (cardType) => {
     if (isStudying) return;
@@ -2221,24 +2268,14 @@ const App = () => {
         // Wordless card: no mic comparison. Speak translation if enabled,
         // pulse the card during playback, then end.
         if (hasTranslation) {
-          const translationVoice = getCurrentVoice(
-            settings.translationVoiceName || settings.selectedVoiceName
-          );
-          if (!translationVoice) return;
-
           clearManualPulse();
           setCardPulsing(cardType, true);
           setManualPulseCard(cardType);
 
-          speakText(
-            translation,
-            () => {
-              setCardPulsing(cardType, false);
-              setManualPulseCard(null);
-            },
-            settings.translationVoiceName || settings.selectedVoiceName,
-            settings.translationRepeatTimes
-          );
+          speakTranslationSmart(translation, () => {
+            setCardPulsing(cardType, false);
+            setManualPulseCard(null);
+          });
         }
         return;
       }
@@ -2263,22 +2300,12 @@ const App = () => {
 
     // --- Wordless card → speak only the translation ---
     if (!hasWord) {
-      const translationVoice = getCurrentVoice(
-        settings.translationVoiceName || settings.selectedVoiceName
-      );
-      if (!translationVoice) return;
-
       clearManualPulse();
       setCardPulsing(cardType, true);
       setManualPulseCard(cardType);
       const finishPronunciation = () => clearManualPulse();
 
-      speakText(
-        translation,
-        finishPronunciation,
-        settings.translationVoiceName || settings.selectedVoiceName,
-        settings.translationRepeatTimes
-      );
+      speakTranslationSmart(translation, finishPronunciation);
       return;
     }
 
@@ -2294,12 +2321,7 @@ const App = () => {
 
     if (settings.pronounceTranslation && hasTranslation) {
       speakText(word, () => {
-        const translationVoice = getCurrentVoice(settings.translationVoiceName);
-        if (translationVoice) {
-          speakText(translation, finishPronunciation, settings.translationVoiceName, settings.translationRepeatTimes);
-        } else {
-          finishPronunciation();
-        }
+        speakTranslationSmart(translation, finishPronunciation);
       });
     } else {
       speakText(word, finishPronunciation);
