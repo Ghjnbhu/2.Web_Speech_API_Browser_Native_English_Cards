@@ -1,5 +1,7 @@
 {
   "lessons": [
+    { "file": "Alphabet_Vowels.jsonn",     "title": "Alphabet Vowels" },
+    { "file": "Alphabet.json",     "title": "Alphabet" },
     { "file": "KitchenCards_20.json",     "title": "Kitchen Cards (20)" },
     { "file": "MyEnglishFlashcards.json", "title": "My English Flashcards" },
     { "file": "MyEnglishLessons.json",    "title": "My English Lessons" }

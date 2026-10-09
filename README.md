@@ -85,3 +85,12 @@ text
            bottom of viewport
 
 Clicking an Already-Active Card Should Stop Its Pronunciation and Flashing
+
+Change: click on wordless card in Navigation mode pronounces only the translation
+
+Behaviour summary after the patch
+Card state	            Navigation mode (click)                 Auto Study (advance)	        Repeat-after-me
+word + translation	    word → translation                      word → translation → advance	word only (attempts, mic)
+word only	word	    word → advance	word only               translation only	            translation (pulse → speak → unpulse)
+translation → advance	skipped (advances without speaking)     neither	silent no-op	        advance	skipped
+

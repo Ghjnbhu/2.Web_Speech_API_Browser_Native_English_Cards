@@ -141,6 +141,24 @@
 //                 dropped. This lets base64-embedded PNG/JPEG/GIF/WebP/BMP/
 //                 ICO/SVG images inside lesson SVGs render, while keeping
 //                 the same XSS posture as before.
+// App.jsx - CHANGED: A wordless card that carries only a translation is now
+//                 pronounced (translation only) in Navigation mode when
+//                 clicked, and in Auto Study mode when the study flow
+//                 reaches it.
+// App.jsx - CHANGED (Repeat-after-me + translation):
+//   • "Pronounce translation" is respected in repeat-after-me mode.
+//   • On a MATCHED attempt (final one for that word), the translation is
+//     spoken once, then the study advances / the nav-repeat cycle ends.
+//     On a FAULT, nothing is spoken — the existing retry/consume logic
+//     is unchanged.
+//   • A wordless card with a translation: the mic is skipped (nothing to
+//     compare), the translation is spoken once (if enabled), then the
+//     study advances / the nav-repeat cycle ends. If "Pronounce
+//     translation" is off, the card advances silently.
+//   • The "Pronounce translation" checkbox is no longer disabled while
+//     repeat-after-me is on; the "(not used in repeat-after-me mode)"
+//     hint has been removed, and the mode message in handleMainAction
+//     now reflects the actual behaviour.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -491,6 +509,7 @@ const App = () => {
   const currentRepeatIndexRef = useRef(0);
   const totalRepeatsRef = useRef(1);
   const currentWordRef = useRef('');
+  const currentTranslationRef = useRef('');
   const currentCardTypeRef = useRef('singular');
   const currentCardIndexRef = useRef(0);
 
@@ -507,6 +526,7 @@ const App = () => {
   const startRepeatListeningRef = useRef(null);
   const pronounceAndMaybeListenRef = useRef(null);
   const finishNavRepeatRef = useRef(null);
+  const speakTranslationThenDoneRef = useRef(null);
 
   // Guards so the on-mount decision runs exactly once per page load.
   const initialAutoLoadAttemptedRef = useRef(false);
@@ -722,6 +742,7 @@ const App = () => {
     currentRepeatIndexRef.current = 0;
     totalRepeatsRef.current = 1;
     currentWordRef.current = '';
+    currentTranslationRef.current = '';
     lastSpokenRef.current = '';
   };
 
@@ -997,6 +1018,53 @@ const App = () => {
     });
   }, []);
 
+  // ------------------------------------------------------------
+  // speakTranslationThenDone
+  // In repeat-after-me mode: called after a MATCHED attempt (final one
+  // for that word) OR for a wordless card with a translation. Speaks the
+  // translation once (if enabled), then advances the study / finishes
+  // the nav-repeat cycle.
+  // ------------------------------------------------------------
+  const speakTranslationThenDone = useCallback((translation) => {
+    const step = () => {
+      if (isStudyingRef.current) {
+        moveToNextCardInStudy();
+      } else if (navRepeatActiveRef.current) {
+        finishNavRepeatRef.current?.();
+      }
+    };
+
+    const hasTranslation =
+      settingsRef.current.pronounceTranslation &&
+      !!translation && translation.trim() !== '';
+
+    if (!hasTranslation) { step(); return; }
+
+    const effectiveTranslationVoiceName =
+      (settingsRef.current.translationVoiceName || '').trim() !== ''
+        ? settingsRef.current.translationVoiceName
+        : (settingsRef.current.selectedVoiceName || null);
+
+    const voice = getCurrentVoice(effectiveTranslationVoiceName);
+    if (!voice) { step(); return; }
+
+    const repeats = Math.max(1, settingsRef.current.translationRepeatTimes || 1);
+
+    speakTextRef.current(
+      translation,
+      () => {
+        if (!isRepeatCycleActive()) return;
+        step();
+      },
+      effectiveTranslationVoiceName,
+      repeats
+    );
+  }, []);
+
+  useEffect(() => {
+    speakTranslationThenDoneRef.current = speakTranslationThenDone;
+  }, [speakTranslationThenDone]);
+
   const getWordForRecord = (record, cardType) => {
     if (!record) return '';
     return cardType === 'singular' ? (record.singular?.word || '') : (record.plural?.word || '');
@@ -1051,11 +1119,31 @@ const App = () => {
     }
   };
 
+  // ============================================================
+  // pronounceAndMaybeListen
+  // Auto Study (isStudying=true, repeat-after-me off): word → (translation)
+  // → advance. A wordless card with only a translation speaks the
+  // translation and then advances.
+  // Repeat-after-me: word → mic listen → on MATCH speak the translation,
+  // then advance. Wordless cards speak the translation (if enabled) and
+  // advance without opening the mic.
+  // ============================================================
   const pronounceAndMaybeListen = (cardType, index, record) => {
     if (!settings.autoPronounce) return;
     if (!isStudyingRef.current) return;
+
     const word = getWordForRecord(record, cardType);
-    if (!word || word.trim() === '') { setTimeout(() => moveToNextCardInStudy(), 300); return; }
+    const translation = getTranslationForRecord(record, cardType);
+
+    const hasWord = !!word && word.trim() !== '';
+    const hasTranslation =
+      !!translation && translation.trim() !== '' && settings.pronounceTranslation;
+
+    // Nothing to pronounce at all → advance.
+    if (!hasWord && !hasTranslation) {
+      setTimeout(() => moveToNextCardInStudy(), 300);
+      return;
+    }
 
     const key = `${index}_${cardType}`;
     if (lastSpokenRef.current === key) return;
@@ -1064,9 +1152,9 @@ const App = () => {
     currentCardTypeRef.current = cardType;
     currentCardIndexRef.current = index;
     currentWordRef.current = word;
+    currentTranslationRef.current = translation;
 
     const repeatAfterMe = settings.repeatAfterMe;
-    const pronounceTranslation = settings.pronounceTranslation;
     const translationRepeatTimes = Math.max(1, settings.translationRepeatTimes || 1);
     const rawTranslationVoiceName = settings.translationVoiceName;
     const selectedVoiceName = settings.selectedVoiceName;
@@ -1078,22 +1166,58 @@ const App = () => {
 
     totalRepeatsRef.current = totalRepeats;
 
-    if (repeatAfterMe) { speakOneAndListen(word, 0, totalRepeats); return; }
+    // --- Repeat-after-me branch ---
+    if (repeatAfterMe) {
+      if (!hasWord) {
+        // Wordless card: no mic comparison. Speak the translation (if
+        // enabled) and advance, else advance silently.
+        if (hasTranslation) {
+          speakTranslationThenDoneRef.current?.(translation);
+        } else {
+          setTimeout(() => moveToNextCardInStudy(), 300);
+        }
+        return;
+      }
+      speakOneAndListen(word, 0, totalRepeats);
+      return;
+    }
 
-    const translation = getTranslationForRecord(record, cardType);
-    const hasTranslation = translation && translation.trim() !== '';
+    // --- Wordless card → speak only the translation, then advance ---
+    if (!hasWord) {
+      const translationVoice = getCurrentVoice(effectiveTranslationVoiceName);
+      if (translationVoice) {
+        speakTextRef.current(
+          translation,
+          () => {
+            if (!isStudyingRef.current) return;
+            setTimeout(() => moveToNextCardInStudy(), 300);
+          },
+          effectiveTranslationVoiceName,
+          translationRepeatTimes
+        );
+      } else {
+        setTimeout(() => moveToNextCardInStudy(), 300);
+      }
+      return;
+    }
 
-    if (pronounceTranslation && hasTranslation) {
+    // --- Normal word-card flow ---
+    if (hasTranslation) {
       speakTextRef.current(word, () => {
         if (!isStudyingRef.current) return;
         setTimeout(() => {
           if (!isStudyingRef.current) return;
           const translationVoice = getCurrentVoice(effectiveTranslationVoiceName);
           if (translationVoice) {
-            speakTextRef.current(translation, () => {
-              if (!isStudyingRef.current) return;
-              setTimeout(() => moveToNextCardInStudy(), 300);
-            }, effectiveTranslationVoiceName, translationRepeatTimes);
+            speakTextRef.current(
+              translation,
+              () => {
+                if (!isStudyingRef.current) return;
+                setTimeout(() => moveToNextCardInStudy(), 300);
+              },
+              effectiveTranslationVoiceName,
+              translationRepeatTimes
+            );
           } else {
             setTimeout(() => moveToNextCardInStudy(), 300);
           }
@@ -1118,6 +1242,7 @@ const App = () => {
     currentRepeatIndexRef.current = 0;
     totalRepeatsRef.current = 1;
     currentWordRef.current = '';
+    currentTranslationRef.current = '';
     setCardPulsing(navRepeatCardTypeRef.current, false);
     setManualPulseCard(null);
   }, [stopRepeatListening]);
@@ -1144,6 +1269,10 @@ const App = () => {
     currentCardTypeRef.current = cardType;
     currentWordRef.current = word;
     lastSpokenRef.current = `${currentIndexRef.current}_${cardType}`;
+
+    // Remember the current card's translation for the match handler.
+    const rec = currentRecordRef.current;
+    currentTranslationRef.current = getTranslationForRecord(rec, cardType);
 
     const totalAttempts = Math.max(1, settings.repeatTimes || 1);
     totalRepeatsRef.current = totalAttempts;
@@ -1181,6 +1310,7 @@ const App = () => {
     currentRepeatIndexRef.current = 0;
     totalRepeatsRef.current = 1;
     currentWordRef.current = '';
+    currentTranslationRef.current = '';
     setLastRecognized('');
 
     if (isRandomSessionRef.current) {
@@ -1398,11 +1528,9 @@ const App = () => {
           setTimeout(() => {
             setRepeatStatus('');
             setRepeatProgress({ current: 0, total: 0 });
-            if (isStudyingRef.current) {
-              moveToNextCardInStudy();
-            } else if (navRepeatActiveRef.current) {
-              finishNavRepeatRef.current?.();
-            }
+            // After the last MATCHED attempt, speak the translation
+            // (if enabled), then advance / finish the cycle.
+            speakTranslationThenDoneRef.current?.(currentTranslationRef.current || '');
           }, 700);
         } else {
           setTimeout(() => {
@@ -1433,6 +1561,8 @@ const App = () => {
               }
               setRepeatStatus('');
               setRepeatProgress({ current: 0, total: 0 });
+              // Fault on the last attempt → advance WITHOUT speaking
+              // the translation.
               if (isStudyingRef.current) {
                 moveToNextCardInStudy();
               } else if (navRepeatActiveRef.current) {
@@ -1477,6 +1607,8 @@ const App = () => {
               }
               setRepeatStatus('');
               setRepeatProgress({ current: 0, total: 0 });
+              // Fault on the last attempt (no speech) → advance WITHOUT
+              // speaking the translation.
               if (isStudyingRef.current) {
                 moveToNextCardInStudy();
               } else if (navRepeatActiveRef.current) {
@@ -1702,7 +1834,7 @@ const App = () => {
       startStudyTimer();
       let modeMsg = '';
       if (settings.repeatAfterMe) {
-        modeMsg = `🎤 Repeat-after-me mode:\n• Word is pronounced ${settings.repeatTimes} time(s)\n• After EACH pronunciation the mic listens\n• If each attempt matches, the study advances\n• If not, the same attempt repeats\n• (Translation pronunciation is not used in this mode)${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
+        modeMsg = `🎤 Repeat-after-me mode:\n• Word is pronounced ${settings.repeatTimes} time(s)\n• After EACH pronunciation the mic listens\n• If each attempt matches, the study advances\n• If not, the same attempt repeats\n• ${settings.pronounceTranslation ? 'Translation is spoken after the word is matched' : 'Translation pronunciation is OFF'}${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
       } else if (settings.autoPronounce && settings.selectedVoiceName) {
         modeMsg = `🔊 Auto-pronunciation mode: Each card will be pronounced and auto-advance\n${settings.pronounceTranslation ? '🌐 Translation will also be pronounced\n' : ''}⏱️ No timer - progress after pronunciation completes${settings.randomOrder ? '\n\n🔀 Random order enabled.' : ''}`;
       } else {
@@ -2053,6 +2185,14 @@ const App = () => {
     }
   }, [currentRecord, dbLoaded]);
 
+  // ============================================================
+  // handleCardClick (Navigation mode)
+  // Non-repeat mode: word → (translation). Wordless card with a
+  // translation: speak the translation only.
+  // Repeat-after-me: word → mic listen → on match translation spoken
+  // by the transcript effect. Wordless card with a translation:
+  // speak the translation and end any active nav-repeat cycle.
+  // ============================================================
   const handleCardClick = (cardType) => {
     if (isStudying) return;
     if (!dbLoaded || !currentRecord) return;
@@ -2067,9 +2207,42 @@ const App = () => {
       word = currentRecord.plural?.word || '';
       translation = currentRecord.plural?.translation || '';
     }
-    if (!word || word.trim() === '') return;
 
+    const hasWord = !!word && word.trim() !== '';
+    const hasTranslation =
+      !!translation && translation.trim() !== '' && settings.pronounceTranslation;
+
+    // Nothing at all to say → silent no-op.
+    if (!hasWord && !hasTranslation) return;
+
+    // --- Repeat-after-me branch ---
     if (settings.repeatAfterMe) {
+      if (!hasWord) {
+        // Wordless card: no mic comparison. Speak translation if enabled,
+        // pulse the card during playback, then end.
+        if (hasTranslation) {
+          const translationVoice = getCurrentVoice(
+            settings.translationVoiceName || settings.selectedVoiceName
+          );
+          if (!translationVoice) return;
+
+          clearManualPulse();
+          setCardPulsing(cardType, true);
+          setManualPulseCard(cardType);
+
+          speakText(
+            translation,
+            () => {
+              setCardPulsing(cardType, false);
+              setManualPulseCard(null);
+            },
+            settings.translationVoiceName || settings.selectedVoiceName,
+            settings.translationRepeatTimes
+          );
+        }
+        return;
+      }
+
       if (navRepeatActiveRef.current && navRepeatCardTypeRef.current === cardType) {
         cancelRepeatCycle();
         setCardPulsing(cardType, false);
@@ -2080,6 +2253,7 @@ const App = () => {
       return;
     }
 
+    // --- Toggle-off branch ---
     if (manualPulseCard === cardType) {
       cancelAllSpeech();
       setCardPulsing(cardType, false);
@@ -2087,6 +2261,28 @@ const App = () => {
       return;
     }
 
+    // --- Wordless card → speak only the translation ---
+    if (!hasWord) {
+      const translationVoice = getCurrentVoice(
+        settings.translationVoiceName || settings.selectedVoiceName
+      );
+      if (!translationVoice) return;
+
+      clearManualPulse();
+      setCardPulsing(cardType, true);
+      setManualPulseCard(cardType);
+      const finishPronunciation = () => clearManualPulse();
+
+      speakText(
+        translation,
+        finishPronunciation,
+        settings.translationVoiceName || settings.selectedVoiceName,
+        settings.translationRepeatTimes
+      );
+      return;
+    }
+
+    // --- Normal word-card flow ---
     const currentVoice = getCurrentVoice();
     if (!currentVoice) return;
 
@@ -2096,7 +2292,7 @@ const App = () => {
     setManualPulseCard(cardType);
     const finishPronunciation = () => clearManualPulse();
 
-    if (settings.pronounceTranslation && translation && translation.trim() !== '') {
+    if (settings.pronounceTranslation && hasTranslation) {
       speakText(word, () => {
         const translationVoice = getCurrentVoice(settings.translationVoiceName);
         if (translationVoice) {
@@ -2611,12 +2807,8 @@ const App = () => {
                 <div className="setting-item checkbox">
                   <label>
                     <input type="checkbox" checked={settings.pronounceTranslation}
-                      onChange={(e) => handleSettingChange('pronounceTranslation', e.target.checked)}
-                      disabled={settings.repeatAfterMe} />
+                      onChange={(e) => handleSettingChange('pronounceTranslation', e.target.checked)} />
                     Pronounce translation
-                    {settings.repeatAfterMe && (
-                      <small style={{ color: '#ff9800', marginLeft: '0.4rem' }}>(not used in repeat-after-me mode)</small>
-                    )}
                   </label>
                 </div>
                 <div className="setting-item">
