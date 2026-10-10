@@ -167,6 +167,31 @@
 //   only after the previous finishes. This applies to every translation
 //   path: wordless cards, word+translation cards, and the repeat-after-me
 //   success flow.
+// App.jsx - FIXED (repeat-after-me navigation-mode hand-off):
+//   Clicking a wordless card while a repeat-after-me cycle is still in
+//   flight used to leave the previous cycle's mic/pipeline alive, which
+//   produced a "phantom" listening session on the previous word. Now:
+//     • cancelRepeatCycle() additionally clears the pulse on the card
+//       that was cycling, so no stale .active-pulse can remain after
+//       a hand-off.
+//     • handleCardClick's repeat-after-me branch, when the clicked card
+//       is wordless, cancels any in-flight cycle FIRST (which stops
+//       speech, stops the mic, clears the refs, and resets the pulse),
+//       and only then starts the translation playback for the newly
+//       clicked card.
+//   This closes the race where the previous card's scheduled
+//   startRepeatListening('old word') could fire after the user had
+//   already moved on to a different card.
+// App.jsx - FIXED (wordless-card toggle in repeat-after-me navigation):
+//   Clicking the same wordless card again while its translation is
+//   being played back used to restart the utterance and toggle the
+//   pulse class off/on in the same tick (which restarts the CSS
+//   animation and looks like a flash). Now the wordless branch of
+//   the repeat-after-me case checks `manualPulseCard === cardType`
+//   first and treats the second click as a cancel: it stops the
+//   speech, removes the pulse, clears manualPulseCard, and returns.
+//   This gives wordless cards the same click-to-stop toggle behaviour
+//   that word cards already have.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -784,6 +809,13 @@ const App = () => {
     resetTranscript();
   }, [resetTranscript]);
 
+  // -------------------------------------------------------------
+  // cancelRepeatCycle
+  // Tear down an active repeat-after-me cycle.
+  // NOTE: this also clears the pulse on the card that was cycling,
+  // so no stale .active-pulse can remain after a hand-off (e.g. the
+  // user clicked the other card mid-cycle).
+  // -------------------------------------------------------------
   const cancelRepeatCycle = () => {
     navRepeatActiveRef.current = false;
     setNavRepeatActive(false);
@@ -795,6 +827,12 @@ const App = () => {
     currentWordRef.current = '';
     currentTranslationRef.current = '';
     lastSpokenRef.current = '';
+
+    // Clear the pulse on whichever card was cycling.
+    if (navRepeatCardTypeRef.current) {
+      setCardPulsing(navRepeatCardTypeRef.current, false);
+    }
+    setManualPulseCard(null);
   };
 
   // Apply loaded voices: update state, auto-pick default voices if the user
@@ -2265,8 +2303,35 @@ const App = () => {
     // --- Repeat-after-me branch ---
     if (settings.repeatAfterMe) {
       if (!hasWord) {
-        // Wordless card: no mic comparison. Speak translation if enabled,
-        // pulse the card during playback, then end.
+        // Wordless card: no mic comparison possible.
+        //
+        // (a) If a repeat cycle is already in flight on the OTHER card,
+        //     cancel it FIRST. Otherwise the previously-scheduled
+        //     startRepeatListening(oldWord) would fire ~400 ms later and
+        //     open the mic on a card the user has already moved on from
+        //     — a "phantom" listening session. cancelRepeatCycle() also
+        //     stops any speech, aborts the mic, clears the refs, and
+        //     removes the pulse from the card that was cycling.
+        if (navRepeatActiveRef.current) {
+          cancelRepeatCycle();
+        }
+
+        // (b) Toggle-off: if this same wordless card is already pulsing
+        //     because its translation is being played back, treat the
+        //     click as a cancel — stop the speech, remove the pulse,
+        //     and return. Without this check, a second click would
+        //     restart the utterance and toggle the pulse class off/on
+        //     in the same tick, restarting the CSS animation (which
+        //     looks like a flash).
+        if (manualPulseCard === cardType) {
+          cancelAllSpeech();
+          setCardPulsing(cardType, false);
+          setManualPulseCard(null);
+          return;
+        }
+
+        // (c) Otherwise start the translation playback, pulsing the
+        //     clicked card during playback, and clear the pulse when done.
         if (hasTranslation) {
           clearManualPulse();
           setCardPulsing(cardType, true);
