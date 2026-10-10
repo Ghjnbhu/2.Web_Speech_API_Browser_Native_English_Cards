@@ -35,19 +35,6 @@
 //                 attempts and report them at session completion.
 //                 Report line format: `N. word - "recognized"` (or `N. word -`).
 // App.jsx - NEW: "Auto align elements" checkbox.
-//   When ON:
-//     • The "Gap between cards (px)" field REMAINS VISIBLE.
-//       Its default value is 10px.
-//       It represents ALL paddings around the cards:
-//         – top bar → cards
-//         – cards → bottom
-//         – between the two cards
-//         – left/right inset of the cards row
-//     • LANDSCAPE: two cards side by side.
-//     • PORTRAIT: each card on its OWN ROW (stacked).
-//       Card height is derived from the ACTUAL measured top-bar height,
-//       so both cards exactly fill the remaining space.
-//   When OFF: raw numeric settings are used as-is.
 // App.jsx - NEW: When a Repeat-after-me session is active, the status pill
 //                 hides the DB filename and ID info so only the repeat
 //                 indicators (Listening / Matched / Retry / Repeat After Me)
@@ -76,11 +63,6 @@
 //                 even if the engine emits a stale transcript or interim
 //                 results too early. Guarantees the user always has time to
 //                 pronounce the word.
-//                 Implementation: transcriptBaselineRef + listenStartedAtRef
-//                 are snapshotted in startRepeatListening(); the transcript
-//                 effect bails while the transcript hasn't grown past the
-//                 baseline AND while the min window hasn't elapsed (adding
-//                 the remaining time to its existing 800 ms debounce).
 // App.jsx - FIXED: the recognized-word chip now shows ONLY the words the
 //                 user said AFTER the current attempt's mic opened. It slices
 //                 the transcript at transcriptBaselineRef.current before
@@ -130,17 +112,9 @@
 //                 `#484348a8` background (or white in light theme).
 // App.jsx - CHANGED: The vertical gap between the top bar and the cards row
 //                 is now a fixed 5 px (TOP_BAR_GAP_PX), independent from the
-//                 other gaps. The gap between cards, the bottom gap, and the
-//                 left/right inset keep using settings.cardGap. Implemented
-//                 by setting topGap = TOP_BAR_GAP_PX inside the auto-align
-//                 block; topGap already drives both the --landscape-top-gap
-//                 CSS variable and the card-height math, so both stay in sync.
+//                 other gaps.
 // App.jsx - FIXED (Option A): SVG sanitizer now ALLOWS <image> tags whose
-//                 href is a safe inline data:image/*;base64 URI. External
-//                 URLs (http/file/javascript/data:text/html) are still
-//                 dropped. This lets base64-embedded PNG/JPEG/GIF/WebP/BMP/
-//                 ICO/SVG images inside lesson SVGs render, while keeping
-//                 the same XSS posture as before.
+//                 href is a safe inline data:image/*;base64 URI.
 // App.jsx - CHANGED: A wordless card that carries only a translation is now
 //                 pronounced (translation only) in Navigation mode when
 //                 clicked, and in Auto Study mode when the study flow
@@ -149,195 +123,75 @@
 //   • "Pronounce translation" is respected in repeat-after-me mode.
 //   • On a MATCHED attempt (final one for that word), the translation is
 //     spoken once, then the study advances / the nav-repeat cycle ends.
-//     On a FAULT, nothing is spoken — the existing retry/consume logic
-//     is unchanged.
-//   • A wordless card with a translation: the mic is skipped (nothing to
-//     compare), the translation is spoken once (if enabled), then the
-//     study advances / the nav-repeat cycle ends. If "Pronounce
-//     translation" is off, the card advances silently.
-//   • The "Pronounce translation" checkbox is no longer disabled while
-//     repeat-after-me is on; the "(not used in repeat-after-me mode)"
-//     hint has been removed, and the mode message in handleMainAction
-//     now reflects the actual behaviour.
+//     On a FAULT, nothing is spoken.
+//   • A wordless card with a translation: the mic is skipped, the
+//     translation is spoken once (if enabled), then the study advances /
+//     the nav-repeat cycle ends. If "Pronounce translation" is off, the
+//     card advances silently.
 // App.jsx - NEW: Translation strings are now split by script when spoken.
-//   Latin-script runs (English letters, digits, common Latin punctuation)
-//   inside a translation are pronounced with the "Select Voice" voice,
-//   while the remaining (non-Latin) runs keep using the "Translation
-//   Voice" voice. Runs are spoken in order, chained so each one starts
-//   only after the previous finishes. This applies to every translation
-//   path: wordless cards, word+translation cards, and the repeat-after-me
-//   success flow.
-// App.jsx - FIXED (repeat-after-me navigation-mode hand-off):
-//   Clicking a wordless card while a repeat-after-me cycle is still in
-//   flight used to leave the previous cycle's mic/pipeline alive, which
-//   produced a "phantom" listening session on the previous word. Now:
-//     • cancelRepeatCycle() additionally clears the pulse on the card
-//       that was cycling, so no stale .active-pulse can remain after
-//       a hand-off.
-//     • handleCardClick's repeat-after-me branch, when the clicked card
-//       is wordless, cancels any in-flight cycle FIRST (which stops
-//       speech, stops the mic, clears the refs, and resets the pulse),
-//       and only then starts the translation playback for the newly
-//       clicked card.
-//   This closes the race where the previous card's scheduled
-//   startRepeatListening('old word') could fire after the user had
-//   already moved on to a different card.
-// App.jsx - FIXED (wordless-card toggle in repeat-after-me navigation):
-//   Clicking the same wordless card again while its translation is
-//   being played back used to restart the utterance and toggle the
-//   pulse class off/on in the same tick (which restarts the CSS
-//   animation and looks like a flash). Now the wordless branch of
-//   the repeat-after-me case checks `manualPulseCard === cardType`
-//   first and treats the second click as a cancel: it stops the
-//   speech, removes the pulse, clears manualPulseCard, and returns.
-//   This gives wordless cards the same click-to-stop toggle behaviour
-//   that word cards already have.
-// App.jsx - FIXED (single-letter recognition):
-//   The Web Speech API is tuned for words, not phonemes, so a bare
-//   letter like "A", "B", "C" is almost always transcribed as a
-//   neighbouring word ("be", "bee", "see", "sea", "you", ...). The
-//   exact-match similarity check used to reject those, which made
-//   single-letter cards nearly unusable. Now, when the expected
-//   word is a single Latin letter, the transcript comparison also
-//   accepts the common word forms the recognizer emits for that
-//   letter (see LETTER_ALIASES). Genuine mismatches like "B" vs
-//   "the" are still rejected, so the failure mode stays honest.
-// App.jsx - FIXED (Android Desktop-mode portrait card width):
-//   In Android Chrome's "Desktop site" mode the reported CSS viewport
-//   is ~980 px even though the phone screen is much narrower. In the
-//   portrait branch of the auto-align block, the card width used to be
-//   clamped by `Math.min(settings.cardWidth, rowWidth)`, which meant
-//   the card never grew past settings.cardWidth (default 400) and left
-//   most of the wide viewport empty. The clamp has been removed: in
-//   portrait auto-align the single card per row now fills the
-//   available row width (bounded below by MIN_CARD_WIDTH and, for
-//   sanity on very wide screens, above by the new MAX_AUTO_CARD_WIDTH).
-//   This mirrors what the landscape branch already does, so one card
-//   per row correctly expands to the available width on any viewport.
-// App.jsx - NEW (elongated / repeated single-letter aliases):
-//   Users repeating a single letter often stretch the vowel or repeat
-//   the letter several times. The recognizer then emits things like
-//   "aa", "aaa", "aaaa", "a a", "a a a", "a a a a", "beee", "bee bee",
-//   "bee bee bee", "see see", etc. The previous alias check accepted
-//   only the bare letter and its single phonetic twin. A new predicate
-//   (isRepeatedLetterMatch) now also accepts:
-//     • the letter (or any of its phonetic twins) followed by one or
-//       more copies of its own last character ("aa", "beee", …);
-//     • the letter (or any of its phonetic twins) repeated as whole
-//       whitespace-separated tokens ("a a a", "bee bee bee", …).
-//   Both patterns are capped by MAX_LETTER_REPEATS so a runaway
-//   transcript does not match forever. The existing similarity check
-//   and isLetterMatch are unchanged; the three predicates are OR-ed
-//   into the success condition in the transcript effect.
-// App.jsx - FIXED (multi-word utterances cut off after the first word):
-//   With `continuous: true` + `interimResults: true`, the Web Speech
-//   API emits a new transcript string on every interim update. The
-//   transcript effect used to start its debounce timer on EVERY update
-//   and evaluate once `800 + remaining` ms had elapsed since the LAST
-//   effect run — which meant an interim result containing only the
-//   first word ("Food") could be evaluated and the mic stopped before
-//   the user had finished saying "Food waste". Now:
-//     • A new ref `lastTranscriptLengthRef` tracks the transcript
-//       length at the moment the debounce timer was set.
-//     • The debounce window is `Math.max(remaining, SILENCE_DEBOUNCE_MS)`
-//       where SILENCE_DEBOUNCE_MS = 1500 ms. The mic is only evaluated
-//       after 1.5 s of NO new words — i.e. after the user has finished
-//       the whole utterance, not after the first word.
-//     • Inside the timer, if the transcript has grown since the timer
-//       was set, the handler bails and lets the effect re-run with the
-//       newer transcript. This guarantees we always evaluate the
-//       latest COMPLETE utterance.
-//     • lastTranscriptLengthRef is reset in startRepeatListening so
-//       each attempt starts from a clean slate.
+// App.jsx - FIXED (repeat-after-me navigation-mode hand-off).
+// App.jsx - FIXED (wordless-card toggle in repeat-after-me navigation).
+// App.jsx - FIXED (single-letter recognition).
+// App.jsx - FIXED (Android Desktop-mode portrait card width).
+// App.jsx - NEW (elongated / repeated single-letter aliases).
+// App.jsx - FIXED (multi-word utterances cut off after the first word).
+// App.jsx - NEW (Option C — JS-measured SVG sizing).
+// App.jsx - FIXED (Option C reruns after SVG insertion).
+// App.jsx - NEW (dynamic SVG ↔ Translation split):
+//   The translation's NATURAL (un-clamped) height is measured, then
+//   the card's content area is divided between the translation and
+//   the SVG wrapper deterministically:
+//       • Short translation  → the SVG absorbs the extra space.
+//       • Long translation   → the SVG shrinks down to MIN_SVG_H
+//                              (40px), and the translation grows to
+//                              fill whatever is left above that floor.
+//   The CSS max-height on .translation is only a first-paint
+//   fallback; the JS overrides it with an exact pixel value.
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
 import './App.css';
 
-// =============================================================
-// Constants
-// =============================================================
 const LESSONS_INDEX_URL = '/lessons/index.json';
 
-// Auto-align constants
 const AUTO_H_PADDING  = 24;
 const MIN_CARD_WIDTH  = 180;
 const MIN_CARD_HEIGHT = 180;
-// Upper bound on the auto-aligned card width. Prevents the single
-// portrait card from stretching to an absurd size on a 4K/ultrawide
-// monitor, while still allowing it to fill ordinary desktop viewports
-// (e.g. Android Chrome "Desktop site" reports ~980 CSS px).
 const MAX_AUTO_CARD_WIDTH = 1000;
 
-// Vertical space between the top bar and the cards row.
-// Used ONLY for the top gap; the inter-card gap, the bottom gap,
-// and the side inset keep using settings.cardGap.
 const TOP_BAR_GAP_PX = 5;
 
-// Fallback top bar heights (used only until the observer reports a real value)
 const TOP_BAR_HEIGHT_LANDSCAPE = 52;
-const TOP_BAR_HEIGHT_PORTRAIT  = 96;   // two rows
+const TOP_BAR_HEIGHT_PORTRAIT  = 96;
 
-// When comparing against the accumulated transcript we take only the last N
-// words. Six is enough for a short utterance, and small enough that stale
-// audio from previous attempts does not dominate the comparison.
 const TRANSCRIPT_CHUNK_WORDS = 6;
 
-// Minimum time (ms) the mic stays open for a repeat-after-me attempt,
-// measured from the moment startRepeatListening() fires. Guarantees the
-// user always has a window to pronounce the word, even if the engine
-// emits a stale transcript or produces interim results too early.
 const LISTEN_MIN_MS = 2500;
 
-// Silence window (ms) after the LAST recognized word before the
-// transcript is evaluated. This is what makes multi-word phrases like
-// "Food waste" work: the engine keeps emitting interim results for
-// each word, and we only commit to a comparison once the user has
-// actually stopped speaking.
 const SILENCE_DEBOUNCE_MS = 1500;
 
-// Cap on how many times a single letter (or its phonetic twin) may be
-// repeated/elongated in the transcript for it to still count as a
-// match. Anything longer is treated as likely noise.
 const MAX_LETTER_REPEATS = 12;
 
-// Voice-group language prefixes
 const ENGLISH_LANG_PREFIXES = ['en-gb', 'en-us', 'en-au'];
 const RUSSIAN_LANG_PREFIXES = ['ru-ru'];
 
-// Cookie used to persist the DB file name across page refreshes.
 const DB_FILENAME_COOKIE = 'ecoCards.dbFileName';
-const DB_FILENAME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year, in seconds
+const DB_FILENAME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-// =============================================================
-// Cookie helpers
-// =============================================================
 const setCookie = (name, value, maxAgeSeconds) => {
   if (typeof document === 'undefined') return;
   const encoded = encodeURIComponent(value ?? '');
-  const parts = [
-    `${name}=${encoded}`,
-    'path=/',
-    'SameSite=Lax',
-  ];
-  if (typeof maxAgeSeconds === 'number') {
-    parts.push(`max-age=${maxAgeSeconds}`);
-  }
+  const parts = [`${name}=${encoded}`, 'path=/', 'SameSite=Lax'];
+  if (typeof maxAgeSeconds === 'number') parts.push(`max-age=${maxAgeSeconds}`);
   document.cookie = parts.join('; ');
 };
 
 const getCookie = (name) => {
   if (typeof document === 'undefined') return '';
   const prefix = name + '=';
-  const found = document.cookie
-    .split('; ')
-    .find((row) => row.startsWith(prefix));
+  const found = document.cookie.split('; ').find((row) => row.startsWith(prefix));
   if (!found) return '';
-  try {
-    return decodeURIComponent(found.slice(prefix.length));
-  } catch (_) {
-    return '';
-  }
+  try { return decodeURIComponent(found.slice(prefix.length)); } catch (_) { return ''; }
 };
 
 const deleteCookie = (name) => {
@@ -345,9 +199,6 @@ const deleteCookie = (name) => {
   document.cookie = `${name}=; path=/; SameSite=Lax; max-age=0`;
 };
 
-// =============================================================
-// Utilities
-// =============================================================
 const normalizeForComparison = (str) => {
   if (!str) return '';
   return String(str)
@@ -399,7 +250,6 @@ const stripTrailingPunctuation = (text) => {
   return String(text).replace(/[.,!?;:]+$/g, '').trim();
 };
 
-// Return the last N words of a transcript string, whitespace-collapsed.
 const lastWords = (text, n) => {
   if (!text) return '';
   const words = String(text).trim().split(/\s+/).filter(Boolean);
@@ -407,12 +257,6 @@ const lastWords = (text, n) => {
   return words.slice(-n).join(' ');
 };
 
-// -------------------------------------------------------------
-// Script splitting for translations.
-// We split a translation string into runs of Latin-script characters
-// and everything else, so Latin runs can be spoken with the "Select
-// Voice" voice and the rest with the "Translation Voice".
-// -------------------------------------------------------------
 const isLatinChar = (ch) => /[A-Za-z\u00C0-\u024F]/.test(ch);
 
 const splitTranslationByScript = (text) => {
@@ -434,12 +278,9 @@ const splitTranslationByScript = (text) => {
       currentIsLatin = true;
       current += ch;
     } else if (/\s/.test(ch) || /[.,!?;:'"()\[\]{}\-–—…«»0-9]/.test(ch)) {
-      // Whitespace or neutral punctuation/digits: keep with whatever
-      // script we're currently in.
       if (currentIsLatin === null) currentIsLatin = false;
       current += ch;
     } else {
-      // Non-Latin, non-neutral character (Cyrillic, Armenian, CJK, …).
       if (currentIsLatin === true) flush();
       currentIsLatin = false;
       current += ch;
@@ -450,14 +291,6 @@ const splitTranslationByScript = (text) => {
   return segments.filter((s) => s.text.trim() !== '');
 };
 
-// -------------------------------------------------------------
-// Single-letter alias table.
-// The Web Speech API is tuned for words, not phonemes, so a bare
-// letter like "B" is almost always transcribed as a neighbouring
-// word ("be", "bee", "the", "he"). The keys below are the
-// normalized single-letter expected values, and the values are the
-// normalized transcripts the recognizer is likely to emit for them.
-// -------------------------------------------------------------
 const LETTER_ALIASES = {
   a: ['a', 'eh', 'hey', 'ay'],
   b: ['b', 'be', 'bee'],
@@ -487,81 +320,43 @@ const LETTER_ALIASES = {
   z: ['z', 'zee', 'zed'],
 };
 
-// Returns true when `expected` is a single Latin letter and `chunk`
-// matches any of the recognizer-friendly word forms for that letter.
 const isLetterMatch = (expected, chunk) => {
   const ne = normalizeForComparison(expected);
   const nc = normalizeForComparison(chunk);
   if (!ne || !nc) return false;
-
-  // Only applies when the expected value is a single Latin letter.
   if (ne.length !== 1 || !/[a-z]/.test(ne)) return false;
-
   const aliases = LETTER_ALIASES[ne];
   if (!aliases) return false;
   return aliases.includes(nc);
 };
 
-// -------------------------------------------------------------
-// Elongated / repeated single-letter matching.
-//
-// When the user repeats or stretches a single letter, the recognizer
-// typically emits one of these shapes:
-//
-//   Letter form:            "aa", "aaa", "a a", "a a a", …
-//   Phonetic-twin form:     "bee", "beee", "be be", "bee bee bee", …
-//
-// For an expected single letter `x`, accept any chunk whose normalized
-// form matches one of those patterns for `x` OR for any of the words
-// in LETTER_ALIASES[x].
-// -------------------------------------------------------------
-
-// Split a normalized chunk into its whitespace-separated tokens.
 const chunkTokens = (nc) => nc.split(/\s+/).filter(Boolean);
 
-// True when every token in `tokens` is equal to `base`.
 const allTokensEqual = (tokens, base) =>
   tokens.length > 0 && tokens.every((t) => t === base);
 
-// True when the entire normalized chunk is `base` followed by one or more
-// extra copies of its own last character, with no separators:
-// "a", "aa", "aaa", "beee", "beeee", …
 const isElongationOf = (nc, base) => {
   if (!base) return false;
-  // Must be a run of a single repeated character, e.g. "a", "aaa",
-  // but not "bee" (which is b + ee). Also cap the length.
   if (!/^(.)\1*$/.test(nc)) return false;
   if (nc.length > MAX_LETTER_REPEATS) return false;
-  // Must be the base character (single-char base only).
   if (base.length !== 1) return false;
   return nc[0] === base;
 };
 
-// True when the whole normalized chunk is `base` repeated as whole tokens
-// separated by whitespace: "a a", "a a a", "bee bee bee", …
 const isRepetitionOf = (nc, base) => {
   if (!base) return false;
   const tokens = chunkTokens(nc);
-  if (tokens.length < 2) return false;               // at least two repeats
+  if (tokens.length < 2) return false;
   if (tokens.length > MAX_LETTER_REPEATS) return false;
   return allTokensEqual(tokens, base);
 };
 
-// Public predicate used by the transcript effect.
-//
-// `expected` is the raw expected word (from the card).
-// `chunk`    is the last-N-words slice of the newly-heard transcript.
 const isRepeatedLetterMatch = (expected, chunk) => {
   const ne = normalizeForComparison(expected);
   const nc = normalizeForComparison(chunk);
   if (!ne || !nc) return false;
-
-  // Only applies when the expected value is a single Latin letter.
   if (ne.length !== 1 || !/[a-z]/.test(ne)) return false;
-
-  // Candidates: the bare letter and every phonetic twin for it.
   const candidates = [ne, ...(LETTER_ALIASES[ne] || [])];
-
   for (const base of candidates) {
     if (isElongationOf(nc, base)) return true;
     if (isRepetitionOf(nc, base)) return true;
@@ -621,7 +416,6 @@ const useDisplayInfo = () => {
   return info;
 };
 
-// ---- Voice group helpers ----
 const matchesLangPrefix = (lang, prefixes) => {
   const l = (lang || '').toLowerCase().replace('_', '-');
   return prefixes.some((p) => l === p || l.startsWith(p + '-'));
@@ -630,15 +424,11 @@ const matchesLangPrefix = (lang, prefixes) => {
 const filterVoicesByLangPrefixes = (voices, prefixes) =>
   voices.filter((v) => matchesLangPrefix(v.lang, prefixes));
 
-// Pick a random element from an array (uniform). Returns null if empty.
 const pickRandom = (arr) => {
   if (!arr || arr.length === 0) return null;
   return arr[Math.floor(Math.random() * arr.length)];
 };
 
-// Build a categorized summary of loaded voices for the success alert.
-// Shows only voices whose language matches the Russian or English groups.
-// Order: Russian (ru-RU) FIRST, then English (en-GB / en-US / en-AU).
 const buildVoicesLoadedMessage = (voices) => {
   const englishVoices = filterVoicesByLangPrefixes(voices, ENGLISH_LANG_PREFIXES);
   const russianVoices = filterVoicesByLangPrefixes(voices, RUSSIAN_LANG_PREFIXES);
@@ -666,13 +456,8 @@ const buildVoicesLoadedMessage = (voices) => {
   return lines.join('\n');
 };
 
-// =============================================================
-// Component
-// =============================================================
 const App = () => {
   const [dbLoaded, setDbLoaded] = useState(false);
-  // Seed the DB file name from the cookie so the pill shows the last
-  // known name immediately, even before a real DB is loaded.
   const [dbFileName, setDbFileName] = useState(() => {
     try { return getCookie(DB_FILENAME_COOKIE) || ''; } catch (_) { return ''; }
   });
@@ -700,15 +485,10 @@ const App = () => {
   const [lessonsListError, setLessonsListError] = useState('');
   const [isLoadingLessonsList, setIsLoadingLessonsList] = useState(false);
 
-  // Measured top bar height (updated via ResizeObserver).
   const [measuredTopBarHeight, setMeasuredTopBarHeight] = useState(null);
 
-  // Tracks whether nav-repeat mode is currently active (for UI mirroring).
   const [navRepeatActive, setNavRepeatActive] = useState(false);
 
-  // Flipped to true once the on-mount load decision (auto-load from cookie
-  // vs. open the picker) has fully resolved. The pill stays disabled until
-  // then so an early click cannot race the auto-load.
   const [initialLoadResolved, setInitialLoadResolved] = useState(false);
 
   const displayInfo = useDisplayInfo();
@@ -718,7 +498,7 @@ const App = () => {
     topPanelWidth: 916,
     cardWidth: 400,
     cardHeight: 400,
-    cardGap: 10,               // default gap for auto-align: all paddings around cards
+    cardGap: 10,
     showTranscription: true,
     showTranslation: true,
     loadLessonLocally: false,
@@ -730,14 +510,14 @@ const App = () => {
     selectedVoiceName: "",
     repeatTimes: 3,
     autoPronounce: true,
-    pronounceTranslation: true,   // default is CHECKED
+    pronounceTranslation: true,
     translationVoiceName: "",
     translationRepeatTimes: 1,
     randomOrder: false,
     repeatAfterMe: false,
-    repeatOnWordsNotEqual: false,   // default is UNCHECKED
-    hideAlerts: true,               // default is CHECKED
-    invisibleTopBar: true,          // default is CHECKED
+    repeatOnWordsNotEqual: false,
+    hideAlerts: true,
+    invisibleTopBar: true,
   });
 
   const singularSvgRef = useRef(null);
@@ -785,14 +565,8 @@ const App = () => {
   const navRepeatActiveRef = useRef(false);
   const navRepeatCardTypeRef = useRef('singular');
 
-  // Minimum-window support: snapshot the transcript length and the moment
-  // the mic opened, so the transcript effect can ignore stale content and
-  // refuse to close the mic before LISTEN_MIN_MS has elapsed.
   const transcriptBaselineRef = useRef(0);
   const listenStartedAtRef = useRef(0);
-  // Tracks the transcript length at the moment the debounce timer was set.
-  // Used inside the timer to bail if the transcript grew (more words
-  // arrived) so the effect re-runs and evaluates the newest transcript.
   const lastTranscriptLengthRef = useRef(0);
 
   const speakTextRef = useRef(null);
@@ -801,14 +575,18 @@ const App = () => {
   const finishNavRepeatRef = useRef(null);
   const speakTranslationThenDoneRef = useRef(null);
 
-  // Guards so the on-mount decision runs exactly once per page load.
   const initialAutoLoadAttemptedRef = useRef(false);
-  // Mirrors `initialLoadResolved` state into a ref so `loadDatabase` (which
-  // is a useCallback and doesn't re-create on state change) can read it.
   const initialLoadResolvedRef = useRef(false);
 
-  // Ref to the top bar DOM node so we can measure it.
   const topBarRef = useRef(null);
+
+  // Option C: refs for JS measurement of per-card heights.
+  const singularContentRef = useRef(null);
+  const pluralContentRef = useRef(null);
+  const singularTranscriptionRef = useRef(null);
+  const pluralTranscriptionRef = useRef(null);
+  const singularTranslationRef = useRef(null);
+  const pluralTranslationRef = useRef(null);
 
   const {
     transcript,
@@ -837,12 +615,10 @@ const App = () => {
     }
   }, []);
 
-  // Keep the ref in sync with the state used to gate the pill.
   useEffect(() => {
     initialLoadResolvedRef.current = initialLoadResolved;
   }, [initialLoadResolved]);
 
-  // ---- Persist the DB file name in a cookie whenever it changes ----
   useEffect(() => {
     if (dbFileName) {
       setCookie(DB_FILENAME_COOKIE, dbFileName, DB_FILENAME_COOKIE_MAX_AGE);
@@ -851,7 +627,6 @@ const App = () => {
     }
   }, [dbFileName]);
 
-  // ---- Measure the actual rendered height of the top bar ----
   useEffect(() => {
     const node = topBarRef.current;
     if (!node || typeof ResizeObserver === 'undefined') {
@@ -883,15 +658,6 @@ const App = () => {
     };
   }, []);
 
-  // =========================================================
-  // On-mount decision:
-  //   • Read the cookie `ecoCards.dbFileName`.
-  //   • If it exists, build the URL directly as
-  //         /lessons/<cookie-value>.json
-  //     and load it — WITHOUT consulting the lessons index first.
-  //   • If there is no cookie, OR the direct fetch fails, open the
-  //     "📂 Choose a lesson" modal.
-  // =========================================================
   useEffect(() => {
     let cancelled = false;
 
@@ -900,7 +666,6 @@ const App = () => {
       setInitialLoadResolved(true);
     };
 
-    // Fire-and-forget: populate the picker list in the background.
     setIsLoadingLessonsList(true);
     setLessonsListError('');
     fetch(LESSONS_INDEX_URL, { headers: { Accept: 'application/json' } })
@@ -922,7 +687,6 @@ const App = () => {
         if (!cancelled) setIsLoadingLessonsList(false);
       });
 
-    // Only decide once per page load (StrictMode double-invokes in dev).
     if (initialAutoLoadAttemptedRef.current) {
       return () => { cancelled = true; };
     }
@@ -930,7 +694,6 @@ const App = () => {
 
     const remembered = (getCookie(DB_FILENAME_COOKIE) || '').trim();
 
-    // --- Local-file mode: cannot auto-restore a user-picked File.
     if (settingsRef.current.loadLessonLocally) {
       if (remembered) {
         setSettings((prev) => ({
@@ -942,14 +705,12 @@ const App = () => {
       return () => { cancelled = true; };
     }
 
-    // --- Server mode with NO cookie → open the picker.
     if (!remembered) {
       setIsLessonPickerOpen(true);
       resolveInitialLoad();
       return () => { cancelled = true; };
     }
 
-    // --- Server mode WITH a cookie → build the URL directly and load.
     const fileName = /\.(json|dbms)$/i.test(remembered)
       ? remembered
       : `${remembered}.json`;
@@ -975,16 +736,11 @@ const App = () => {
   const isRepeatCycleActive = () =>
     isStudyingRef.current || navRepeatActiveRef.current;
 
-  // Suppressible informational alert. Uses `settingsRef.current.hideAlerts`
-  // so it always sees the latest value, even inside stale closures.
   const notify = (message) => {
     if (settingsRef.current.hideAlerts) return;
     alert(message);
   };
 
-  // Always-shown modal, used for session *results*. Not affected by
-  // `hideAlerts`, because results are the output of the operation the user
-  // asked for, not a transient notification about it.
   const report = (message) => {
     alert(message);
   };
@@ -1006,13 +762,6 @@ const App = () => {
     resetTranscript();
   }, [resetTranscript]);
 
-  // -------------------------------------------------------------
-  // cancelRepeatCycle
-  // Tear down an active repeat-after-me cycle.
-  // NOTE: this also clears the pulse on the card that was cycling,
-  // so no stale .active-pulse can remain after a hand-off (e.g. the
-  // user clicked the other card mid-cycle).
-  // -------------------------------------------------------------
   const cancelRepeatCycle = () => {
     navRepeatActiveRef.current = false;
     setNavRepeatActive(false);
@@ -1025,15 +774,12 @@ const App = () => {
     currentTranslationRef.current = '';
     lastSpokenRef.current = '';
 
-    // Clear the pulse on whichever card was cycling.
     if (navRepeatCardTypeRef.current) {
       setCardPulsing(navRepeatCardTypeRef.current, false);
     }
     setManualPulseCard(null);
   };
 
-  // Apply loaded voices: update state, auto-pick default voices if the user
-  // has not chosen any yet, then alert with the categorized summary.
   const applyLoadedVoices = (voices) => {
     setAvailableVoices(voices);
     setVoicesLoaded(true);
@@ -1255,12 +1001,6 @@ const App = () => {
 
   useEffect(() => { speakTextRef.current = speakText; });
 
-  // -------------------------------------------------------------
-  // speakTranslationSmart
-  // Speak a translation string, routing Latin-script segments through
-  // the "Select Voice" voice and everything else through the
-  // "Translation Voice". Segments are spoken in order.
-  // -------------------------------------------------------------
   const speakTranslationSmart = useCallback((text, onComplete = null) => {
     if (!text || String(text).trim() === '') { if (onComplete) onComplete(); return; }
 
@@ -1311,9 +1051,6 @@ const App = () => {
     setLastRecognized('');
 
     transcriptBaselineRef.current = (transcript || '').length;
-    // Snapshot the transcript length at the moment the timer window opens.
-    // The transcript effect uses this inside its debounce handler to bail
-    // if new words arrived (so it re-runs with the newer transcript).
     lastTranscriptLengthRef.current = (transcript || '').length;
     listenStartedAtRef.current = Date.now();
 
@@ -1345,13 +1082,6 @@ const App = () => {
     });
   }, []);
 
-  // ------------------------------------------------------------
-  // speakTranslationThenDone
-  // In repeat-after-me mode: called after a MATCHED attempt (final one
-  // for that word) OR for a wordless card with a translation. Speaks the
-  // translation (script-aware), then advances the study / finishes the
-  // nav-repeat cycle.
-  // ------------------------------------------------------------
   const speakTranslationThenDone = useCallback((translation) => {
     const step = () => {
       if (isStudyingRef.current) {
@@ -1431,15 +1161,6 @@ const App = () => {
     }
   };
 
-  // ============================================================
-  // pronounceAndMaybeListen
-  // Auto Study (isStudying=true, repeat-after-me off): word → (translation)
-  // → advance. A wordless card with only a translation speaks the
-  // translation and then advances.
-  // Repeat-after-me: word → mic listen → on MATCH speak the translation
-  // (script-aware), then advance. Wordless cards speak the translation
-  // (if enabled) and advance without opening the mic.
-  // ============================================================
   const pronounceAndMaybeListen = (cardType, index, record) => {
     if (!settings.autoPronounce) return;
     if (!isStudyingRef.current) return;
@@ -1451,7 +1172,6 @@ const App = () => {
     const hasTranslation =
       !!translation && translation.trim() !== '' && settings.pronounceTranslation;
 
-    // Nothing to pronounce at all → advance.
     if (!hasWord && !hasTranslation) {
       setTimeout(() => moveToNextCardInStudy(), 300);
       return;
@@ -1471,11 +1191,8 @@ const App = () => {
 
     totalRepeatsRef.current = totalRepeats;
 
-    // --- Repeat-after-me branch ---
     if (repeatAfterMe) {
       if (!hasWord) {
-        // Wordless card: no mic comparison. Speak the translation (if
-        // enabled) and advance, else advance silently.
         if (hasTranslation) {
           speakTranslationThenDoneRef.current?.(translation);
         } else {
@@ -1487,7 +1204,6 @@ const App = () => {
       return;
     }
 
-    // --- Wordless card → speak only the translation, then advance ---
     if (!hasWord) {
       speakTranslationSmart(translation, () => {
         if (!isStudyingRef.current) return;
@@ -1496,7 +1212,6 @@ const App = () => {
       return;
     }
 
-    // --- Normal word-card flow ---
     if (hasTranslation) {
       speakTextRef.current(word, () => {
         if (!isStudyingRef.current) return;
@@ -1555,7 +1270,6 @@ const App = () => {
     currentWordRef.current = word;
     lastSpokenRef.current = `${currentIndexRef.current}_${cardType}`;
 
-    // Remember the current card's translation for the match handler.
     const rec = currentRecordRef.current;
     currentTranslationRef.current = getTranslationForRecord(rec, cardType);
 
@@ -1632,7 +1346,6 @@ const App = () => {
           return `${i + 1}. ${entry.word} -${heard}`;
         });
 
-        // Session result: shown even when hideAlerts is on.
         report(
           `🎉 Repeat After Me session completed!\n\n` +
           `Not passed ${failed.length} card(s):\n` +
@@ -1780,16 +1493,6 @@ const App = () => {
     };
   }, []);
 
-  // ---- Transcript handling ----
-  //
-  // FIXED (multi-word utterances): with `continuous: true` +
-  // `interimResults: true`, the engine emits a new transcript string on
-  // every interim update. We must NOT evaluate on the first word — we
-  // must wait until the user has actually STOPPED speaking. The debounce
-  // below is `Math.max(remaining, SILENCE_DEBOUNCE_MS)`, and the handler
-  // bails if the transcript grew since the timer was set, so it always
-  // evaluates the newest COMPLETE utterance (e.g. "Food waste" instead
-  // of "Food").
   useEffect(() => {
     if (!isListeningForRepeat) return;
     if (!transcript || transcript.trim() === '') return;
@@ -1798,16 +1501,10 @@ const App = () => {
     const elapsed = Date.now() - listenStartedAtRef.current;
     const remaining = Math.max(0, LISTEN_MIN_MS - elapsed);
 
-    // Snapshot the transcript length at the moment this timer is set.
-    // Inside the handler, if the transcript has grown beyond this
-    // snapshot, we bail and let the effect re-run with the newer text.
     const snapshotLength = transcript.length;
     lastTranscriptLengthRef.current = snapshotLength;
 
     const handle = setTimeout(() => {
-      // More words arrived since this timer was set → bail. The
-      // effect will re-run with the newer transcript and reset the
-      // silence window.
       if (transcript.length !== lastTranscriptLengthRef.current) return;
 
       const expected = expectedWordRef.current;
@@ -1818,11 +1515,7 @@ const App = () => {
       setLastRecognized(cleaned);
 
       const ratio = similarityRatio(expected, chunk);
-      // Accept recognizer-friendly word forms for single letters
-      // (e.g. "B" vs "be"/"bee", "C" vs "see"/"sea").
       const letterMatch = isLetterMatch(expected, chunk);
-      // Accept elongated / repeated forms of the letter and of its
-      // phonetic twin (e.g. "aa", "a a a", "beee", "be be be").
       const repeatedLetterMatch = isRepeatedLetterMatch(expected, chunk);
       const attemptIndex = currentRepeatIndexRef.current;
       const totalAttempts = totalRepeatsRef.current;
@@ -1839,8 +1532,6 @@ const App = () => {
           setTimeout(() => {
             setRepeatStatus('');
             setRepeatProgress({ current: 0, total: 0 });
-            // After the last MATCHED attempt, speak the translation
-            // (script-aware), then advance / finish the cycle.
             speakTranslationThenDoneRef.current?.(currentTranslationRef.current || '');
           }, 700);
         } else {
@@ -1872,8 +1563,6 @@ const App = () => {
               }
               setRepeatStatus('');
               setRepeatProgress({ current: 0, total: 0 });
-              // Fault on the last attempt → advance WITHOUT speaking
-              // the translation.
               if (isStudyingRef.current) {
                 moveToNextCardInStudy();
               } else if (navRepeatActiveRef.current) {
@@ -1918,8 +1607,6 @@ const App = () => {
               }
               setRepeatStatus('');
               setRepeatProgress({ current: 0, total: 0 });
-              // Fault on the last attempt (no speech) → advance WITHOUT
-              // speaking the translation.
               if (isStudyingRef.current) {
                 moveToNextCardInStudy();
               } else if (navRepeatActiveRef.current) {
@@ -1962,9 +1649,9 @@ const App = () => {
     translationRepeatTimes: { type: 'number', min: 1, max: 5, default: 3 },
     randomOrder: { type: 'boolean', default: true },
     repeatAfterMe: { type: 'boolean', default: false },
-    repeatOnWordsNotEqual: { type: 'boolean', default: false }, // default UNCHECKED
-    hideAlerts: { type: 'boolean', default: true },              // default CHECKED
-    invisibleTopBar: { type: 'boolean', default: true },         // default CHECKED
+    repeatOnWordsNotEqual: { type: 'boolean', default: false },
+    hideAlerts: { type: 'boolean', default: true },
+    invisibleTopBar: { type: 'boolean', default: true },
   };
 
   const validateSettings = (raw) => {
@@ -2079,7 +1766,6 @@ const App = () => {
 
   const handleSettingChange = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
 
-  // When "🎤 Repeat after me" is enabled, force Attempt: = 1.
   const handleRepeatAfterMeToggle = (checked) => {
     setSettings(prev => ({
       ...prev,
@@ -2155,17 +1841,6 @@ const App = () => {
     }
   };
 
-  // =============================================================
-  // SVG sanitization (Option A: allow safe inline data:image/*)
-  // =============================================================
-  //
-  // `image` is intentionally NOT in the always-strip list anymore. We
-  // now allow <image> only when its href is a base64-encoded data URI of
-  // a known safe raster/vector image type. External URLs (http, https,
-  // file, ftp, javascript:, data:text/html, etc.) are still dropped.
-  //
-  // If you want to also forbid inline SVG data URIs (paranoid mode),
-  // remove `svg\+xml|` from SAFE_DATA_IMAGE_RE below.
   const DANGEROUS_SVG_TAGS = [
     'script', 'foreignObject', 'iframe', 'object', 'embed',
     'audio', 'video', 'source', 'track',
@@ -2175,7 +1850,6 @@ const App = () => {
   const DANGEROUS_ATTR_NAMES = ['src', 'data', 'formaction', 'action'];
   const isSafeInternalReference = (value) => /^#[A-Za-z_][\w:.-]*$/.test(value.trim());
 
-  // Allow only inline, base64-encoded image data URIs.
   const SAFE_DATA_IMAGE_RE =
     /^data:image\/(png|jpe?g|gif|webp|bmp|x-icon|vnd\.microsoft\.icon|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/i;
 
@@ -2189,12 +1863,10 @@ const App = () => {
     const svgEl = doc.documentElement;
     if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') return null;
 
-    // 1. Remove always-dangerous tags.
     DANGEROUS_SVG_TAGS.forEach((tag) =>
       doc.querySelectorAll(tag).forEach((el) => el.remove())
     );
 
-    // 2. <use> must point to an internal fragment (#id) only.
     doc.querySelectorAll('use').forEach((useEl) => {
       const href =
         useEl.getAttribute('href') ||
@@ -2203,7 +1875,6 @@ const App = () => {
       if (!isSafeInternalReference(href)) useEl.remove();
     });
 
-    // 3. <image> is allowed ONLY when its href is a safe inline data:image/*.
     doc.querySelectorAll('image').forEach((imgEl) => {
       const href =
         imgEl.getAttribute('href') ||
@@ -2212,7 +1883,6 @@ const App = () => {
       if (!isSafeDataImage(href)) imgEl.remove();
     });
 
-    // 4. Per-attribute scrub.
     [svgEl, ...doc.querySelectorAll('*')].forEach((el) => {
       const attrsToRemove = [];
       const tagName = el.tagName.toLowerCase();
@@ -2221,26 +1891,22 @@ const App = () => {
         const name = attr.name.toLowerCase();
         const value = (attr.value || '').trim();
 
-        // on* event handlers
         if (DANGEROUS_ATTR_PREFIXES.some((p) => name.startsWith(p))) {
           attrsToRemove.push(attr.name);
           return;
         }
 
-        // href / xlink:href
         if (name === 'href' || name === 'xlink:href') {
-          if (tagName === 'use') return;            // already validated above
-          if (tagName === 'image') {                // already validated above
+          if (tagName === 'use') return;
+          if (tagName === 'image') {
             if (isSafeDataImage(value)) return;
             attrsToRemove.push(attr.name);
             return;
           }
-          // any other element: only internal #id references allowed
           if (!isSafeInternalReference(value)) attrsToRemove.push(attr.name);
           return;
         }
 
-        // src / data / formaction / action — block javascript:, data:, vbscript:
         if (DANGEROUS_ATTR_NAMES.includes(name)) {
           if (/^\s*(javascript|data|vbscript):/i.test(value)) {
             attrsToRemove.push(attr.name);
@@ -2248,7 +1914,6 @@ const App = () => {
           return;
         }
 
-        // style="... url(javascript:...)"
         if (
           name === 'style' &&
           /url\s*\(\s*['"]?\s*javascript:/i.test(value)
@@ -2260,7 +1925,6 @@ const App = () => {
       attrsToRemove.forEach((a) => el.removeAttribute(a));
     });
 
-    // 5. Neutralize @import inside <style>.
     doc.querySelectorAll('style').forEach((styleEl) => {
       styleEl.textContent = (styleEl.textContent || '').replace(
         /@import[^;]+;/gi,
@@ -2483,28 +2147,6 @@ const App = () => {
     }
   };
 
-  useEffect(() => {
-    if (currentRecord && dbLoaded) {
-      const t = setTimeout(() => {
-        renderSvgToContainer(singularSvgRef.current, currentRecord.singular?.svgCode, 'singular');
-        renderSvgToContainer(pluralSvgRef.current, currentRecord.plural?.svgCode, 'plural');
-      }, 50);
-      return () => clearTimeout(t);
-    } else if (!dbLoaded) {
-      if (singularSvgRef.current) singularSvgRef.current.replaceChildren();
-      if (pluralSvgRef.current) pluralSvgRef.current.replaceChildren();
-    }
-  }, [currentRecord, dbLoaded]);
-
-  // ============================================================
-  // handleCardClick (Navigation mode)
-  // Non-repeat mode: word → (translation). Wordless card with a
-  // translation: speak the translation only.
-  // Repeat-after-me: word → mic listen → on match translation spoken
-  // by the transcript effect. Wordless card with a translation:
-  // speak the translation and end any active nav-repeat cycle.
-  // Translations are spoken script-aware (see speakTranslationSmart).
-  // ============================================================
   const handleCardClick = (cardType) => {
     if (isStudying) return;
     if (!dbLoaded || !currentRecord) return;
@@ -2524,32 +2166,14 @@ const App = () => {
     const hasTranslation =
       !!translation && translation.trim() !== '' && settings.pronounceTranslation;
 
-    // Nothing at all to say → silent no-op.
     if (!hasWord && !hasTranslation) return;
 
-    // --- Repeat-after-me branch ---
     if (settings.repeatAfterMe) {
       if (!hasWord) {
-        // Wordless card: no mic comparison possible.
-        //
-        // (a) If a repeat cycle is already in flight on the OTHER card,
-        //     cancel it FIRST. Otherwise the previously-scheduled
-        //     startRepeatListening(oldWord) would fire ~400 ms later and
-        //     open the mic on a card the user has already moved on from
-        //     — a "phantom" listening session. cancelRepeatCycle() also
-        //     stops any speech, aborts the mic, clears the refs, and
-        //     removes the pulse from the card that was cycling.
         if (navRepeatActiveRef.current) {
           cancelRepeatCycle();
         }
 
-        // (b) Toggle-off: if this same wordless card is already pulsing
-        //     because its translation is being played back, treat the
-        //     click as a cancel — stop the speech, remove the pulse,
-        //     and return. Without this check, a second click would
-        //     restart the utterance and toggle the pulse class off/on
-        //     in the same tick, restarting the CSS animation (which
-        //     looks like a flash).
         if (manualPulseCard === cardType) {
           cancelAllSpeech();
           setCardPulsing(cardType, false);
@@ -2557,8 +2181,6 @@ const App = () => {
           return;
         }
 
-        // (c) Otherwise start the translation playback, pulsing the
-        //     clicked card during playback, and clear the pulse when done.
         if (hasTranslation) {
           clearManualPulse();
           setCardPulsing(cardType, true);
@@ -2582,7 +2204,6 @@ const App = () => {
       return;
     }
 
-    // --- Toggle-off branch ---
     if (manualPulseCard === cardType) {
       cancelAllSpeech();
       setCardPulsing(cardType, false);
@@ -2590,7 +2211,6 @@ const App = () => {
       return;
     }
 
-    // --- Wordless card → speak only the translation ---
     if (!hasWord) {
       clearManualPulse();
       setCardPulsing(cardType, true);
@@ -2601,7 +2221,6 @@ const App = () => {
       return;
     }
 
-    // --- Normal word-card flow ---
     const currentVoice = getCurrentVoice();
     if (!currentVoice) return;
 
@@ -2697,11 +2316,6 @@ const App = () => {
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
 
-      // One card per row: let it fill the available row width, bounded
-      // below by MIN_CARD_WIDTH and above by MAX_AUTO_CARD_WIDTH.
-      // This makes the card expand on wide viewports such as Android
-      // Chrome's "Desktop site" mode, where the reported CSS width is
-      // ~980 instead of the phone's ~360-420.
       effectiveCardWidth = Math.min(
         MAX_AUTO_CARD_WIDTH,
         Math.max(MIN_CARD_WIDTH, rowWidth)
@@ -2732,6 +2346,159 @@ const App = () => {
   };
 
   const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
+
+  // -------------------------------------------------------------
+  // Option C (fixed + dynamic SVG ↔ Translation split):
+  //
+  //   1. Insert the current record's SVG synchronously.
+  //   2. Measure the translation's NATURAL (un-clamped) height.
+  //   3. Divide the card's content area between the translation
+  //      and the SVG wrapper, keeping MIN_SVG_H for the SVG. The
+  //      SVG absorbs whatever the translation doesn't need, so
+  //      short translations give the SVG more room and long
+  //      translations make it shrink.
+  //
+  // A rAF chain re-measures after the browser has done its own
+  // layout pass; a ResizeObserver on each .card-content catches
+  // any external size change.
+  // -------------------------------------------------------------
+  const singularSvgCode = currentRecord?.singular?.svgCode || '';
+  const pluralSvgCode = currentRecord?.plural?.svgCode || '';
+
+  useLayoutEffect(() => {
+    if (!dbLoaded) {
+      if (singularSvgRef.current) singularSvgRef.current.replaceChildren();
+      if (pluralSvgRef.current) pluralSvgRef.current.replaceChildren();
+      return;
+    }
+
+    // Step 1: (re)insert the SVG. This must happen BEFORE measuring.
+    renderSvgToContainer(singularSvgRef.current, singularSvgCode, 'singular');
+    renderSvgToContainer(pluralSvgRef.current, pluralSvgCode, 'plural');
+
+    // Minimum height reserved for the SVG wrapper. Must match the
+    // `min-height` on .svg-wrapper in App.css.
+    const MIN_SVG_H = 40;
+
+    // Gap between the flex children of .card-content. Must match
+    // the `gap` declared on .card-content in App.css.
+    const CONTENT_GAP = 8;
+
+    // Step 2: measure and assign explicit heights.
+    const sizeOne = (contentEl, transcriptionEl, translationEl, svgWrapperEl) => {
+      if (!contentEl || !svgWrapperEl) return;
+
+      // Clear the previous inline sizing so this measurement is honest.
+      svgWrapperEl.style.height = '';
+      svgWrapperEl.style.flex = '';
+      if (translationEl) {
+        translationEl.style.height = '';
+        translationEl.style.maxHeight = '';
+        translationEl.style.flex = '';
+      }
+
+      // Measure the translation's NATURAL height by temporarily
+      // removing the CSS max-height cap. Without this, a long
+      // translation would be measured only at its capped height,
+      // and the SVG would never shrink to make room for the rest.
+      let translationNaturalH = 0;
+      if (translationEl) {
+        const prevMaxHeight = translationEl.style.maxHeight;
+        const prevOverflow = translationEl.style.overflow;
+        translationEl.style.maxHeight = 'none';
+        translationEl.style.overflow = 'visible';
+        translationNaturalH = translationEl.offsetHeight;
+        translationEl.style.maxHeight = prevMaxHeight;
+        translationEl.style.overflow = prevOverflow;
+      }
+
+      const contentH = contentEl.clientHeight;
+      const transcriptionH = transcriptionEl ? transcriptionEl.offsetHeight : 0;
+
+      const gaps =
+        (transcriptionEl ? CONTENT_GAP : 0) +
+        (translationEl && translationNaturalH > 0 ? CONTENT_GAP : 0);
+
+      const available = contentH - transcriptionH - gaps;
+
+      // How tall may the translation be? Leave at least MIN_SVG_H
+      // for the SVG.
+      const maxTranslationH = Math.max(0, available - MIN_SVG_H);
+      const translationH = Math.min(translationNaturalH, maxTranslationH);
+
+      // Pin the translation to its decided height.
+      if (translationEl) {
+        translationEl.style.flex = '0 0 auto';
+        translationEl.style.height = `${translationH}px`;
+        translationEl.style.maxHeight = `${translationH}px`;
+        translationEl.style.overflow = 'hidden';
+      }
+
+      // The SVG gets everything else, with a hard floor.
+      const svgH = Math.max(MIN_SVG_H, available - translationH);
+
+      svgWrapperEl.style.flex = '0 0 auto';
+      svgWrapperEl.style.height = `${svgH}px`;
+    };
+
+    const run = () => {
+      if (!dbLoaded || !currentRecord) return;
+      sizeOne(
+        singularContentRef.current,
+        singularTranscriptionRef.current,
+        singularTranslationRef.current,
+        singularSvgRef.current,
+      );
+      sizeOne(
+        pluralContentRef.current,
+        pluralTranscriptionRef.current,
+        pluralTranslationRef.current,
+        pluralSvgRef.current,
+      );
+    };
+
+    // First pass: right now, before paint.
+    run();
+
+    // Second and third passes: after the browser has laid out the
+    // freshly-inserted <svg> (intrinsic-size resolution, font swap).
+    const raf1 = requestAnimationFrame(run);
+    const raf2 = requestAnimationFrame(() => requestAnimationFrame(run));
+
+    // ResizeObserver on the card CONTENT areas catches any later
+    // external change (window resize, orientation flip, font load).
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        run();
+      });
+      if (singularContentRef.current) ro.observe(singularContentRef.current);
+      if (pluralContentRef.current) ro.observe(pluralContentRef.current);
+    }
+
+    window.addEventListener('resize', run);
+    window.addEventListener('orientationchange', run);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      window.removeEventListener('resize', run);
+      window.removeEventListener('orientationchange', run);
+      if (ro) ro.disconnect();
+    };
+  }, [
+    dbLoaded,
+    currentRecord,
+    singularSvgCode,
+    pluralSvgCode,
+    settings.autoAlign,
+    settings.fontSize,
+    settings.showTranscription,
+    settings.showTranslation,
+    effectiveCardHeight,
+    effectiveCardWidth,
+    isLandscape,
+  ]);
 
   const showRepeatChip =
     (settings.repeatAfterMe && isStudying) ||
@@ -2948,14 +2715,14 @@ const App = () => {
             <div className="english-word">
               {dbLoaded && currentRecord?.singular?.word ? currentRecord.singular.word : ""}
             </div>
-            <div className="card-content">
-              <div className="transcription">
+            <div className="card-content" ref={singularContentRef}>
+              <div className="transcription" ref={singularTranscriptionRef}>
                 {dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}
               </div>
               <div className={svgWrapperClass} ref={singularSvgRef} aria-hidden="true"></div>
-            </div>
-            <div className="translation">
-              {dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}
+              <div className="translation" ref={singularTranslationRef}>
+                {dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}
+              </div>
             </div>
           </div>
 
@@ -2976,14 +2743,14 @@ const App = () => {
             <div className="english-word">
               {dbLoaded && currentRecord?.plural?.word ? currentRecord.plural.word : ""}
             </div>
-            <div className="card-content">
-              <div className="transcription">
+            <div className="card-content" ref={pluralContentRef}>
+              <div className="transcription" ref={pluralTranscriptionRef}>
                 {dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}
               </div>
               <div className={svgWrapperClass} ref={pluralSvgRef} aria-hidden="true"></div>
-            </div>
-            <div className="translation">
-              {dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}
+              <div className="translation" ref={pluralTranslationRef}>
+                {dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}
+              </div>
             </div>
           </div>
         </div>
