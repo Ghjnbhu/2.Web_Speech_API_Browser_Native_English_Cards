@@ -229,6 +229,26 @@
 //   transcript does not match forever. The existing similarity check
 //   and isLetterMatch are unchanged; the three predicates are OR-ed
 //   into the success condition in the transcript effect.
+// App.jsx - FIXED (multi-word utterances cut off after the first word):
+//   With `continuous: true` + `interimResults: true`, the Web Speech
+//   API emits a new transcript string on every interim update. The
+//   transcript effect used to start its debounce timer on EVERY update
+//   and evaluate once `800 + remaining` ms had elapsed since the LAST
+//   effect run — which meant an interim result containing only the
+//   first word ("Food") could be evaluated and the mic stopped before
+//   the user had finished saying "Food waste". Now:
+//     • A new ref `lastTranscriptLengthRef` tracks the transcript
+//       length at the moment the debounce timer was set.
+//     • The debounce window is `Math.max(remaining, SILENCE_DEBOUNCE_MS)`
+//       where SILENCE_DEBOUNCE_MS = 1500 ms. The mic is only evaluated
+//       after 1.5 s of NO new words — i.e. after the user has finished
+//       the whole utterance, not after the first word.
+//     • Inside the timer, if the transcript has grown since the timer
+//       was set, the handler bails and lets the effect re-run with the
+//       newer transcript. This guarantees we always evaluate the
+//       latest COMPLETE utterance.
+//     • lastTranscriptLengthRef is reset in startRepeatListening so
+//       each attempt starts from a clean slate.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -268,6 +288,13 @@ const TRANSCRIPT_CHUNK_WORDS = 6;
 // user always has a window to pronounce the word, even if the engine
 // emits a stale transcript or produces interim results too early.
 const LISTEN_MIN_MS = 2500;
+
+// Silence window (ms) after the LAST recognized word before the
+// transcript is evaluated. This is what makes multi-word phrases like
+// "Food waste" work: the engine keeps emitting interim results for
+// each word, and we only commit to a comparison once the user has
+// actually stopped speaking.
+const SILENCE_DEBOUNCE_MS = 1500;
 
 // Cap on how many times a single letter (or its phonetic twin) may be
 // repeated/elongated in the transcript for it to still count as a
@@ -763,6 +790,10 @@ const App = () => {
   // refuse to close the mic before LISTEN_MIN_MS has elapsed.
   const transcriptBaselineRef = useRef(0);
   const listenStartedAtRef = useRef(0);
+  // Tracks the transcript length at the moment the debounce timer was set.
+  // Used inside the timer to bail if the transcript grew (more words
+  // arrived) so the effect re-runs and evaluates the newest transcript.
+  const lastTranscriptLengthRef = useRef(0);
 
   const speakTextRef = useRef(null);
   const startRepeatListeningRef = useRef(null);
@@ -1280,6 +1311,10 @@ const App = () => {
     setLastRecognized('');
 
     transcriptBaselineRef.current = (transcript || '').length;
+    // Snapshot the transcript length at the moment the timer window opens.
+    // The transcript effect uses this inside its debounce handler to bail
+    // if new words arrived (so it re-runs with the newer transcript).
+    lastTranscriptLengthRef.current = (transcript || '').length;
     listenStartedAtRef.current = Date.now();
 
     try {
@@ -1746,6 +1781,15 @@ const App = () => {
   }, []);
 
   // ---- Transcript handling ----
+  //
+  // FIXED (multi-word utterances): with `continuous: true` +
+  // `interimResults: true`, the engine emits a new transcript string on
+  // every interim update. We must NOT evaluate on the first word — we
+  // must wait until the user has actually STOPPED speaking. The debounce
+  // below is `Math.max(remaining, SILENCE_DEBOUNCE_MS)`, and the handler
+  // bails if the transcript grew since the timer was set, so it always
+  // evaluates the newest COMPLETE utterance (e.g. "Food waste" instead
+  // of "Food").
   useEffect(() => {
     if (!isListeningForRepeat) return;
     if (!transcript || transcript.trim() === '') return;
@@ -1754,7 +1798,18 @@ const App = () => {
     const elapsed = Date.now() - listenStartedAtRef.current;
     const remaining = Math.max(0, LISTEN_MIN_MS - elapsed);
 
+    // Snapshot the transcript length at the moment this timer is set.
+    // Inside the handler, if the transcript has grown beyond this
+    // snapshot, we bail and let the effect re-run with the newer text.
+    const snapshotLength = transcript.length;
+    lastTranscriptLengthRef.current = snapshotLength;
+
     const handle = setTimeout(() => {
+      // More words arrived since this timer was set → bail. The
+      // effect will re-run with the newer transcript and reset the
+      // silence window.
+      if (transcript.length !== lastTranscriptLengthRef.current) return;
+
       const expected = expectedWordRef.current;
       const spoken = transcript;
       const wordsSinceBaseline = spoken.slice(transcriptBaselineRef.current);
@@ -1830,7 +1885,7 @@ const App = () => {
           }
         }, 700);
       }
-    }, 800 + remaining);
+    }, Math.max(remaining, SILENCE_DEBOUNCE_MS));
 
     return () => clearTimeout(handle);
   }, [transcript, isListeningForRepeat, resetTranscript, speakOneAndListen]);
@@ -3181,6 +3236,7 @@ const App = () => {
                     )}
                     <div style={{ marginTop: '0.5rem' }}>
                       listening min: {LISTEN_MIN_MS} ms
+                      {' '}· silence window: {SILENCE_DEBOUNCE_MS} ms
                     </div>
                   </div>
                 )}
