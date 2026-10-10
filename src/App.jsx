@@ -202,6 +202,18 @@
 //   accepts the common word forms the recognizer emits for that
 //   letter (see LETTER_ALIASES). Genuine mismatches like "B" vs
 //   "the" are still rejected, so the failure mode stays honest.
+// App.jsx - FIXED (Android Desktop-mode portrait card width):
+//   In Android Chrome's "Desktop site" mode the reported CSS viewport
+//   is ~980 px even though the phone screen is much narrower. In the
+//   portrait branch of the auto-align block, the card width used to be
+//   clamped by `Math.min(settings.cardWidth, rowWidth)`, which meant
+//   the card never grew past settings.cardWidth (default 400) and left
+//   most of the wide viewport empty. The clamp has been removed: in
+//   portrait auto-align the single card per row now fills the
+//   available row width (bounded below by MIN_CARD_WIDTH and, for
+//   sanity on very wide screens, above by the new MAX_AUTO_CARD_WIDTH).
+//   This mirrors what the landscape branch already does, so one card
+//   per row correctly expands to the available width on any viewport.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -216,6 +228,11 @@ const LESSONS_INDEX_URL = '/lessons/index.json';
 const AUTO_H_PADDING  = 24;
 const MIN_CARD_WIDTH  = 180;
 const MIN_CARD_HEIGHT = 180;
+// Upper bound on the auto-aligned card width. Prevents the single
+// portrait card from stretching to an absurd size on a 4K/ultrawide
+// monitor, while still allowing it to fill ordinary desktop viewports
+// (e.g. Android Chrome "Desktop site" reports ~980 CSS px).
+const MAX_AUTO_CARD_WIDTH = 1000;
 
 // Vertical space between the top bar and the cards row.
 // Used ONLY for the top gap; the inter-card gap, the bottom gap,
@@ -2534,9 +2551,15 @@ const App = () => {
     } else {
       const rowWidth = viewportW - sideInset * 2;
       effectiveTopPanelWidth = Math.max(300, rowWidth);
-      effectiveCardWidth = Math.max(
-        MIN_CARD_WIDTH,
-        Math.min(settings.cardWidth, rowWidth)
+
+      // One card per row: let it fill the available row width, bounded
+      // below by MIN_CARD_WIDTH and above by MAX_AUTO_CARD_WIDTH.
+      // This makes the card expand on wide viewports such as Android
+      // Chrome's "Desktop site" mode, where the reported CSS width is
+      // ~980 instead of the phone's ~360-420.
+      effectiveCardWidth = Math.min(
+        MAX_AUTO_CARD_WIDTH,
+        Math.max(MIN_CARD_WIDTH, rowWidth)
       );
 
       const hAvail =
