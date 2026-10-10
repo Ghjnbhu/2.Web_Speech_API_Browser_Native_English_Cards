@@ -214,6 +214,21 @@
 //   sanity on very wide screens, above by the new MAX_AUTO_CARD_WIDTH).
 //   This mirrors what the landscape branch already does, so one card
 //   per row correctly expands to the available width on any viewport.
+// App.jsx - NEW (elongated / repeated single-letter aliases):
+//   Users repeating a single letter often stretch the vowel or repeat
+//   the letter several times. The recognizer then emits things like
+//   "aa", "aaa", "aaaa", "a a", "a a a", "a a a a", "beee", "bee bee",
+//   "bee bee bee", "see see", etc. The previous alias check accepted
+//   only the bare letter and its single phonetic twin. A new predicate
+//   (isRepeatedLetterMatch) now also accepts:
+//     • the letter (or any of its phonetic twins) followed by one or
+//       more copies of its own last character ("aa", "beee", …);
+//     • the letter (or any of its phonetic twins) repeated as whole
+//       whitespace-separated tokens ("a a a", "bee bee bee", …).
+//   Both patterns are capped by MAX_LETTER_REPEATS so a runaway
+//   transcript does not match forever. The existing similarity check
+//   and isLetterMatch are unchanged; the three predicates are OR-ed
+//   into the success condition in the transcript effect.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -253,6 +268,11 @@ const TRANSCRIPT_CHUNK_WORDS = 6;
 // user always has a window to pronounce the word, even if the engine
 // emits a stale transcript or produces interim results too early.
 const LISTEN_MIN_MS = 2500;
+
+// Cap on how many times a single letter (or its phonetic twin) may be
+// repeated/elongated in the transcript for it to still count as a
+// match. Anything longer is treated as likely noise.
+const MAX_LETTER_REPEATS = 12;
 
 // Voice-group language prefixes
 const ENGLISH_LANG_PREFIXES = ['en-gb', 'en-us', 'en-au'];
@@ -453,6 +473,73 @@ const isLetterMatch = (expected, chunk) => {
   const aliases = LETTER_ALIASES[ne];
   if (!aliases) return false;
   return aliases.includes(nc);
+};
+
+// -------------------------------------------------------------
+// Elongated / repeated single-letter matching.
+//
+// When the user repeats or stretches a single letter, the recognizer
+// typically emits one of these shapes:
+//
+//   Letter form:            "aa", "aaa", "a a", "a a a", …
+//   Phonetic-twin form:     "bee", "beee", "be be", "bee bee bee", …
+//
+// For an expected single letter `x`, accept any chunk whose normalized
+// form matches one of those patterns for `x` OR for any of the words
+// in LETTER_ALIASES[x].
+// -------------------------------------------------------------
+
+// Split a normalized chunk into its whitespace-separated tokens.
+const chunkTokens = (nc) => nc.split(/\s+/).filter(Boolean);
+
+// True when every token in `tokens` is equal to `base`.
+const allTokensEqual = (tokens, base) =>
+  tokens.length > 0 && tokens.every((t) => t === base);
+
+// True when the entire normalized chunk is `base` followed by one or more
+// extra copies of its own last character, with no separators:
+// "a", "aa", "aaa", "beee", "beeee", …
+const isElongationOf = (nc, base) => {
+  if (!base) return false;
+  // Must be a run of a single repeated character, e.g. "a", "aaa",
+  // but not "bee" (which is b + ee). Also cap the length.
+  if (!/^(.)\1*$/.test(nc)) return false;
+  if (nc.length > MAX_LETTER_REPEATS) return false;
+  // Must be the base character (single-char base only).
+  if (base.length !== 1) return false;
+  return nc[0] === base;
+};
+
+// True when the whole normalized chunk is `base` repeated as whole tokens
+// separated by whitespace: "a a", "a a a", "bee bee bee", …
+const isRepetitionOf = (nc, base) => {
+  if (!base) return false;
+  const tokens = chunkTokens(nc);
+  if (tokens.length < 2) return false;               // at least two repeats
+  if (tokens.length > MAX_LETTER_REPEATS) return false;
+  return allTokensEqual(tokens, base);
+};
+
+// Public predicate used by the transcript effect.
+//
+// `expected` is the raw expected word (from the card).
+// `chunk`    is the last-N-words slice of the newly-heard transcript.
+const isRepeatedLetterMatch = (expected, chunk) => {
+  const ne = normalizeForComparison(expected);
+  const nc = normalizeForComparison(chunk);
+  if (!ne || !nc) return false;
+
+  // Only applies when the expected value is a single Latin letter.
+  if (ne.length !== 1 || !/[a-z]/.test(ne)) return false;
+
+  // Candidates: the bare letter and every phonetic twin for it.
+  const candidates = [ne, ...(LETTER_ALIASES[ne] || [])];
+
+  for (const base of candidates) {
+    if (isElongationOf(nc, base)) return true;
+    if (isRepetitionOf(nc, base)) return true;
+  }
+  return false;
 };
 
 const readDisplayInfo = () => {
@@ -1676,13 +1763,16 @@ const App = () => {
       setLastRecognized(cleaned);
 
       const ratio = similarityRatio(expected, chunk);
-      // Also accept recognizer-friendly word forms for single letters
+      // Accept recognizer-friendly word forms for single letters
       // (e.g. "B" vs "be"/"bee", "C" vs "see"/"sea").
       const letterMatch = isLetterMatch(expected, chunk);
+      // Accept elongated / repeated forms of the letter and of its
+      // phonetic twin (e.g. "aa", "a a a", "beee", "be be be").
+      const repeatedLetterMatch = isRepeatedLetterMatch(expected, chunk);
       const attemptIndex = currentRepeatIndexRef.current;
       const totalAttempts = totalRepeatsRef.current;
 
-      if (ratio >= 0.7 || letterMatch) {
+      if (ratio >= 0.7 || letterMatch || repeatedLetterMatch) {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
