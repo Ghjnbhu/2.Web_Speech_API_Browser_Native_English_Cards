@@ -192,6 +192,16 @@
 //   speech, removes the pulse, clears manualPulseCard, and returns.
 //   This gives wordless cards the same click-to-stop toggle behaviour
 //   that word cards already have.
+// App.jsx - FIXED (single-letter recognition):
+//   The Web Speech API is tuned for words, not phonemes, so a bare
+//   letter like "A", "B", "C" is almost always transcribed as a
+//   neighbouring word ("be", "bee", "see", "sea", "you", ...). The
+//   exact-match similarity check used to reject those, which made
+//   single-letter cards nearly unusable. Now, when the expected
+//   word is a single Latin letter, the transcript comparison also
+//   accepts the common word forms the recognizer emits for that
+//   letter (see LETTER_ALIASES). Genuine mismatches like "B" vs
+//   "the" are still rejected, so the failure mode stays honest.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -374,6 +384,58 @@ const splitTranslationByScript = (text) => {
   flush();
 
   return segments.filter((s) => s.text.trim() !== '');
+};
+
+// -------------------------------------------------------------
+// Single-letter alias table.
+// The Web Speech API is tuned for words, not phonemes, so a bare
+// letter like "B" is almost always transcribed as a neighbouring
+// word ("be", "bee", "the", "he"). The keys below are the
+// normalized single-letter expected values, and the values are the
+// normalized transcripts the recognizer is likely to emit for them.
+// -------------------------------------------------------------
+const LETTER_ALIASES = {
+  a: ['a', 'eh', 'hey', 'ay'],
+  b: ['b', 'be', 'bee'],
+  c: ['c', 'see', 'sea'],
+  d: ['d', 'dee'],
+  e: ['e', 'ee'],
+  f: ['f', 'eff'],
+  g: ['g', 'gee', 'jee'],
+  h: ['h', 'aitch', 'haitch'],
+  i: ['i', 'eye', 'ay', 'hi'],
+  j: ['j', 'jay'],
+  k: ['k', 'kay'],
+  l: ['l', 'el', 'ell'],
+  m: ['m', 'em'],
+  n: ['n', 'en'],
+  o: ['o', 'oh', 'owe'],
+  p: ['p', 'pee', 'pea'],
+  q: ['q', 'cue', 'queue'],
+  r: ['r', 'are', 'ar'],
+  s: ['s', 'ess'],
+  t: ['t', 'tee', 'tea'],
+  u: ['u', 'you', 'ewe'],
+  v: ['v', 'vee'],
+  w: ['w', 'double you', 'double-u', 'doubleyou'],
+  x: ['x', 'ex'],
+  y: ['y', 'why', 'wye'],
+  z: ['z', 'zee', 'zed'],
+};
+
+// Returns true when `expected` is a single Latin letter and `chunk`
+// matches any of the recognizer-friendly word forms for that letter.
+const isLetterMatch = (expected, chunk) => {
+  const ne = normalizeForComparison(expected);
+  const nc = normalizeForComparison(chunk);
+  if (!ne || !nc) return false;
+
+  // Only applies when the expected value is a single Latin letter.
+  if (ne.length !== 1 || !/[a-z]/.test(ne)) return false;
+
+  const aliases = LETTER_ALIASES[ne];
+  if (!aliases) return false;
+  return aliases.includes(nc);
 };
 
 const readDisplayInfo = () => {
@@ -1597,10 +1659,13 @@ const App = () => {
       setLastRecognized(cleaned);
 
       const ratio = similarityRatio(expected, chunk);
+      // Also accept recognizer-friendly word forms for single letters
+      // (e.g. "B" vs "be"/"bee", "C" vs "see"/"sea").
+      const letterMatch = isLetterMatch(expected, chunk);
       const attemptIndex = currentRepeatIndexRef.current;
       const totalAttempts = totalRepeatsRef.current;
 
-      if (ratio >= 0.7) {
+      if (ratio >= 0.7 || letterMatch) {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
