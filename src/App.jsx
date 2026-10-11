@@ -137,16 +137,21 @@
 // App.jsx - FIXED (multi-word utterances cut off after the first word).
 // App.jsx - NEW (Option C — JS-measured SVG sizing).
 // App.jsx - FIXED (Option C reruns after SVG insertion).
-// App.jsx - NEW (dynamic SVG ↔ Translation split):
-//   The translation's NATURAL (un-clamped) height is measured, then
-//   the card's content area is divided between the translation and
-//   the SVG wrapper deterministically:
-//       • Short translation  → the SVG absorbs the extra space.
-//       • Long translation   → the SVG shrinks down to MIN_SVG_H
-//                              (40px), and the translation grows to
-//                              fill whatever is left above that floor.
-//   The CSS max-height on .translation is only a first-paint
-//   fallback; the JS overrides it with an exact pixel value.
+// App.jsx - NEW (dynamic SVG ↔ Translation split).
+// App.jsx - NEW (repeated multi-letter word match).
+// App.jsx - NEW (speaking-only status pill):
+//   In Navigation mode with "Repeat After Me" UNCHECKED, while a card is
+//   being pronounced, the status pill collapses to show ONLY the 🔊
+//   speaking indicator. The leading 🌐/📁 icon is hidden and no filename
+//   or ID is shown. As soon as pronunciation ends, the pill returns to
+//   its normal "🌐 filename | ID: n / total" state.
+// App.jsx - NEW (pill disabled while speaking):
+//   isSpeaking is now part of the status pill button's `disabled`
+//   expression, so the pill cannot be clicked while ANY card is being
+//   pronounced (Navigation mode, Auto Study, or Repeat After Me).
+//   Combined with the speaking-only behavior above, this means: click a
+//   card in Navigation mode with RAF off → the pill collapses to a
+//   disabled 🔊 indicator until pronunciation finishes.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -171,6 +176,7 @@ const LISTEN_MIN_MS = 2500;
 const SILENCE_DEBOUNCE_MS = 1500;
 
 const MAX_LETTER_REPEATS = 12;
+const MAX_WORD_REPEATS  = 6;   // cap for repeated multi-letter words
 
 const ENGLISH_LANG_PREFIXES = ['en-gb', 'en-us', 'en-au'];
 const RUSSIAN_LANG_PREFIXES = ['ru-ru'];
@@ -362,6 +368,26 @@ const isRepeatedLetterMatch = (expected, chunk) => {
     if (isRepetitionOf(nc, base)) return true;
   }
   return false;
+};
+
+// Detects when the user said the SAME multi-letter word N times in a row:
+//   expected "Bean"  →  chunk "bean bean"  /  "bean, bean"  /  "bean bean bean"
+// Single-letter repeats are handled separately by isRepeatedLetterMatch.
+const isRepeatedWordMatch = (expected, chunk) => {
+  const ne = normalizeForComparison(expected);
+  const nc = normalizeForComparison(chunk);
+  if (!ne || !nc) return false;
+
+  // Multi-letter words only; single letters use isRepeatedLetterMatch.
+  if (ne.length < 2) return false;
+
+  // SpeechRecognition often emits commas between repeated words:
+  //   "bean, bean"  →  ["bean", "bean"]
+  const tokens = nc.split(/[\s,]+/).filter(Boolean);
+  if (tokens.length < 2) return false;
+  if (tokens.length > MAX_WORD_REPEATS) return false;
+
+  return tokens.every((t) => t === ne);
 };
 
 const readDisplayInfo = () => {
@@ -1517,10 +1543,11 @@ const App = () => {
       const ratio = similarityRatio(expected, chunk);
       const letterMatch = isLetterMatch(expected, chunk);
       const repeatedLetterMatch = isRepeatedLetterMatch(expected, chunk);
+      const repeatedWordMatch = isRepeatedWordMatch(expected, chunk);
       const attemptIndex = currentRepeatIndexRef.current;
       const totalAttempts = totalRepeatsRef.current;
 
-      if (ratio >= 0.7 || letterMatch || repeatedLetterMatch) {
+      if (ratio >= 0.7 || letterMatch || repeatedLetterMatch || repeatedWordMatch) {
         setIsListeningForRepeat(false);
         expectingUserSpeechRef.current = false;
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
@@ -2508,6 +2535,16 @@ const App = () => {
     (settings.repeatAfterMe && isStudying) ||
     (settings.repeatAfterMe && navRepeatActive);
 
+  // Navigation-mode card pronunciation (any RAF state, as long as no
+  // repeat cycle is actually running): collapse the pill to just the
+  // 🔊 speaking indicator. During a live repeat cycle, showRepeatChip
+  // is true and this evaluates false, so the repeat chip stays visible.
+  const pillSpeakingOnly =
+    isSpeaking &&
+    !isStudying &&
+    !navRepeatActive &&
+    !showRepeatChip;
+
   return (
     <div
       className={appClassName}
@@ -2549,6 +2586,7 @@ const App = () => {
                 isLoading ||
                 isStudying ||
                 navRepeatActive ||
+                isSpeaking ||
                 (!initialLoadResolved && !settings.loadLessonLocally)
               }
               aria-live="polite"
@@ -2568,11 +2606,25 @@ const App = () => {
                     : 'Load lesson from server'
               }
             >
-              <span className="db-info-label" aria-hidden="true">
+              <span
+                className="db-info-label"
+                aria-hidden="true"
+                style={pillSpeakingOnly ? { display: 'none' } : undefined}
+              >
                 {settings.loadLessonLocally ? '📁' : '🌐'}
               </span>
 
-              {dbLoaded && currentRecord && !repeatSessionActive ? (
+              {pillSpeakingOnly ? (
+                <span
+                  className="db-info-timer"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Currently speaking"
+                  title="Speaking"
+                >
+                  <span aria-hidden="true">🔊</span>
+                </span>
+              ) : dbLoaded && currentRecord && !repeatSessionActive ? (
                 <>
                   <span className="db-info-name">{dbFileName}</span>
                   <span className="db-info-separator" aria-hidden="true">|</span>

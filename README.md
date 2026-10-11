@@ -94,3 +94,4 @@ word + translation	    word → translation                      word → transl
 word only	word	    word → advance	word only               translation only	            translation (pulse → speak → unpulse)
 translation → advance	skipped (advances without speaking)     neither	silent no-op	        advance	skipped
 
+DB pill button
