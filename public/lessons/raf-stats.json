@@ -1,9 +1,9 @@
 {
-  "game": {
+  "hand": {
     "attempts": 1,
     "unmatched": {
-      "11": 1
+      "Head": 1
     },
-    "lastUpdated": 1791741322132
+    "lastUpdated": 1791744800810
   }
 }
