@@ -1222,3 +1222,114 @@ body.light .app.invisible-top-bar .top-bar {
   background: transparent;
   border-bottom-color: transparent;
 }
+
+/* ============================================================
+   STATISTICS MODAL
+   ============================================================ */
+
+.stats-open-button {
+  background: #0078d4;
+  border: none;
+  color: white;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.stats-open-button:hover {
+  background: #005a9e;
+  transform: translateY(-1px);
+}
+.stats-open-button:focus-visible {
+  outline: 2px solid #4da3ff;
+  outline-offset: 2px;
+}
+
+.stats-modal {
+  max-width: 720px;
+  width: 95%;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: #e0e0e0;
+}
+.stats-table th,
+.stats-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+}
+.stats-table th {
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.stats-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.stats-word {
+  font-family: monospace;
+  font-weight: 600;
+  color: #fff;
+}
+.stats-matched {
+  color: #4caf50;
+  font-weight: 600;
+}
+.stats-mismatched {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.stats-buckets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.stats-buckets li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.1rem 0;
+}
+.stats-bucket-heard {
+  font-family: monospace;
+  color: #ffcc80;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.stats-bucket-count {
+  color: #90caf9;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+body.light .stats-table,
+body.light .stats-table th,
+body.light .stats-table td {
+  color: #333;
+}
+body.light .stats-table th {
+  color: #000;
+  background: rgba(0, 0, 0, 0.04);
+}
+body.light .stats-word {
+  color: #000;
+}
+body.light .stats-bucket-heard {
+  color: #b26500;
+}
+body.light .stats-bucket-count {
+  color: #0d47a1;
+}

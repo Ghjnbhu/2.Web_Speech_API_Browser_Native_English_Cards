@@ -139,22 +139,20 @@
 // App.jsx - FIXED (Option C reruns after SVG insertion).
 // App.jsx - NEW (dynamic SVG ↔ Translation split).
 // App.jsx - NEW (repeated multi-letter word match).
-// App.jsx - NEW (speaking-only status pill):
-//   In Navigation mode with "Repeat After Me" UNCHECKED, while a card is
-//   being pronounced, the status pill collapses to show ONLY the 🔊
-//   speaking indicator. The leading 🌐/📁 icon is hidden and no filename
-//   or ID is shown. As soon as pronunciation ends, the pill returns to
-//   its normal "🌐 filename | ID: n / total" state.
-// App.jsx - NEW (pill disabled while speaking):
-//   isSpeaking is now part of the status pill button's `disabled`
-//   expression, so the pill cannot be clicked while ANY card is being
-//   pronounced (Navigation mode, Auto Study, or Repeat After Me).
-//   Combined with the speaking-only behavior above, this means: click a
-//   card in Navigation mode with RAF off → the pill collapses to a
-//   disabled 🔊 indicator until pronunciation finishes.
+// App.jsx - NEW (speaking-only status pill).
+// App.jsx - NEW (pill disabled while speaking).
+// App.jsx - NEW (Repeat-After-Me statistics):
+//   • Every attempt (match, fault, silence) is recorded to
+//     POST /api/raf-stats.
+//   • Navigation mode posts immediately; Auto Study buffers and
+//     flushes at session end (before the completion report).
+//   • Settings → "📊 Statistics" button opens a modal that GETs
+//     /api/raf-stats and renders a per-word table.
+//   • Store lives at public/lessons/raf-stats.json on the server.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
+import { recordAttempt, flushAutoBuffer, fetchStats } from './rafStats';
 import './App.css';
 
 const LESSONS_INDEX_URL = '/lessons/index.json';
@@ -176,7 +174,7 @@ const LISTEN_MIN_MS = 2500;
 const SILENCE_DEBOUNCE_MS = 1500;
 
 const MAX_LETTER_REPEATS = 12;
-const MAX_WORD_REPEATS  = 6;   // cap for repeated multi-letter words
+const MAX_WORD_REPEATS  = 6;
 
 const ENGLISH_LANG_PREFIXES = ['en-gb', 'en-us', 'en-au'];
 const RUSSIAN_LANG_PREFIXES = ['ru-ru'];
@@ -370,23 +368,15 @@ const isRepeatedLetterMatch = (expected, chunk) => {
   return false;
 };
 
-// Detects when the user said the SAME multi-letter word N times in a row:
-//   expected "Bean"  →  chunk "bean bean"  /  "bean, bean"  /  "bean bean bean"
-// Single-letter repeats are handled separately by isRepeatedLetterMatch.
+// Multi-letter repeated-word detection: "bean bean" / "bean, bean" / "bean bean bean".
 const isRepeatedWordMatch = (expected, chunk) => {
   const ne = normalizeForComparison(expected);
   const nc = normalizeForComparison(chunk);
   if (!ne || !nc) return false;
-
-  // Multi-letter words only; single letters use isRepeatedLetterMatch.
   if (ne.length < 2) return false;
-
-  // SpeechRecognition often emits commas between repeated words:
-  //   "bean, bean"  →  ["bean", "bean"]
   const tokens = nc.split(/[\s,]+/).filter(Boolean);
   if (tokens.length < 2) return false;
   if (tokens.length > MAX_WORD_REPEATS) return false;
-
   return tokens.every((t) => t === ne);
 };
 
@@ -516,6 +506,12 @@ const App = () => {
   const [navRepeatActive, setNavRepeatActive] = useState(false);
 
   const [initialLoadResolved, setInitialLoadResolved] = useState(false);
+
+  // Statistics modal
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [statsData, setStatsData] = useState(null);
+  const [statsError, setStatsError] = useState('');
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const displayInfo = useDisplayInfo();
 
@@ -1359,6 +1355,12 @@ const App = () => {
     clearManualPulse();
 
     if (showCompletionAlert && !completionAlertShownRef.current) {
+      // Auto-mode flush: push the buffered attempt log to the server
+      // before the completion report appears.
+      if (settingsRef.current.repeatAfterMe && !navRepeatActiveRef.current) {
+        flushAutoBuffer();
+      }
+
       isCompletingRef.current = true;
       completionAlertShownRef.current = true;
 
@@ -1555,6 +1557,11 @@ const App = () => {
         setRepeatStatus('matched');
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
 
+        recordAttempt(
+          { word: expected, heard: cleaned || '', matched: true },
+          { immediate: navRepeatActiveRef.current }
+        );
+
         if (isLastAttempt) {
           setTimeout(() => {
             setRepeatStatus('');
@@ -1573,6 +1580,11 @@ const App = () => {
         try { SpeechRecognitionLib.stopListening(); } catch (err) { }
         setRepeatStatus('retry');
         setRepeatProgress({ current: attemptIndex + 1, total: totalAttempts });
+
+        recordAttempt(
+          { word: expected, heard: cleaned || '', matched: false },
+          { immediate: navRepeatActiveRef.current }
+        );
 
         setTimeout(() => {
           if (!isRepeatCycleActive()) return;
@@ -1618,6 +1630,12 @@ const App = () => {
         const attemptIndex = currentRepeatIndexRef.current;
         const totalAttempts = totalRepeatsRef.current;
         const word = currentWordRef.current;
+
+        recordAttempt(
+          { word, heard: '', matched: false },
+          { immediate: navRepeatActiveRef.current }
+        );
+
         setTimeout(() => {
           if (!isRepeatCycleActive()) return;
           const isLastAttempt = attemptIndex + 1 >= totalAttempts;
@@ -1653,6 +1671,23 @@ const App = () => {
   const closeSettings = () => setIsSettingsOpen(false);
   const toggleTheme = () => handleSettingChange('theme', settings.theme === 'dark' ? 'light' : 'dark');
   const handleOpenSettingsFile = () => { if (settingsFileInputRef.current) settingsFileInputRef.current.click(); };
+
+  const openStats = async () => {
+    setIsStatsOpen(true);
+    setIsLoadingStats(true);
+    setStatsError('');
+    try {
+      const data = await fetchStats();
+      setStatsData(data);
+    } catch (err) {
+      setStatsError(err.message || 'Failed to load statistics');
+      setStatsData(null);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
+
+  const closeStats = () => setIsStatsOpen(false);
 
   const SETTINGS_SCHEMA = {
     autoAlign: { type: 'boolean', default: true },
@@ -2374,21 +2409,7 @@ const App = () => {
 
   const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
 
-  // -------------------------------------------------------------
-  // Option C (fixed + dynamic SVG ↔ Translation split):
-  //
-  //   1. Insert the current record's SVG synchronously.
-  //   2. Measure the translation's NATURAL (un-clamped) height.
-  //   3. Divide the card's content area between the translation
-  //      and the SVG wrapper, keeping MIN_SVG_H for the SVG. The
-  //      SVG absorbs whatever the translation doesn't need, so
-  //      short translations give the SVG more room and long
-  //      translations make it shrink.
-  //
-  // A rAF chain re-measures after the browser has done its own
-  // layout pass; a ResizeObserver on each .card-content catches
-  // any external size change.
-  // -------------------------------------------------------------
+  // Option C (fixed): insert the SVG, then measure and assign explicit heights.
   const singularSvgCode = currentRecord?.singular?.svgCode || '';
   const pluralSvgCode = currentRecord?.plural?.svgCode || '';
 
@@ -2399,23 +2420,15 @@ const App = () => {
       return;
     }
 
-    // Step 1: (re)insert the SVG. This must happen BEFORE measuring.
     renderSvgToContainer(singularSvgRef.current, singularSvgCode, 'singular');
     renderSvgToContainer(pluralSvgRef.current, pluralSvgCode, 'plural');
 
-    // Minimum height reserved for the SVG wrapper. Must match the
-    // `min-height` on .svg-wrapper in App.css.
     const MIN_SVG_H = 40;
-
-    // Gap between the flex children of .card-content. Must match
-    // the `gap` declared on .card-content in App.css.
     const CONTENT_GAP = 8;
 
-    // Step 2: measure and assign explicit heights.
     const sizeOne = (contentEl, transcriptionEl, translationEl, svgWrapperEl) => {
       if (!contentEl || !svgWrapperEl) return;
 
-      // Clear the previous inline sizing so this measurement is honest.
       svgWrapperEl.style.height = '';
       svgWrapperEl.style.flex = '';
       if (translationEl) {
@@ -2424,10 +2437,6 @@ const App = () => {
         translationEl.style.flex = '';
       }
 
-      // Measure the translation's NATURAL height by temporarily
-      // removing the CSS max-height cap. Without this, a long
-      // translation would be measured only at its capped height,
-      // and the SVG would never shrink to make room for the rest.
       let translationNaturalH = 0;
       if (translationEl) {
         const prevMaxHeight = translationEl.style.maxHeight;
@@ -2447,13 +2456,9 @@ const App = () => {
         (translationEl && translationNaturalH > 0 ? CONTENT_GAP : 0);
 
       const available = contentH - transcriptionH - gaps;
-
-      // How tall may the translation be? Leave at least MIN_SVG_H
-      // for the SVG.
       const maxTranslationH = Math.max(0, available - MIN_SVG_H);
       const translationH = Math.min(translationNaturalH, maxTranslationH);
 
-      // Pin the translation to its decided height.
       if (translationEl) {
         translationEl.style.flex = '0 0 auto';
         translationEl.style.height = `${translationH}px`;
@@ -2461,9 +2466,7 @@ const App = () => {
         translationEl.style.overflow = 'hidden';
       }
 
-      // The SVG gets everything else, with a hard floor.
       const svgH = Math.max(MIN_SVG_H, available - translationH);
-
       svgWrapperEl.style.flex = '0 0 auto';
       svgWrapperEl.style.height = `${svgH}px`;
     };
@@ -2484,21 +2487,14 @@ const App = () => {
       );
     };
 
-    // First pass: right now, before paint.
     run();
 
-    // Second and third passes: after the browser has laid out the
-    // freshly-inserted <svg> (intrinsic-size resolution, font swap).
     const raf1 = requestAnimationFrame(run);
     const raf2 = requestAnimationFrame(() => requestAnimationFrame(run));
 
-    // ResizeObserver on the card CONTENT areas catches any later
-    // external change (window resize, orientation flip, font load).
     let ro = null;
     if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => {
-        run();
-      });
+      ro = new ResizeObserver(() => { run(); });
       if (singularContentRef.current) ro.observe(singularContentRef.current);
       if (pluralContentRef.current) ro.observe(pluralContentRef.current);
     }
@@ -2535,10 +2531,8 @@ const App = () => {
     (settings.repeatAfterMe && isStudying) ||
     (settings.repeatAfterMe && navRepeatActive);
 
-  // Navigation-mode card pronunciation (any RAF state, as long as no
-  // repeat cycle is actually running): collapse the pill to just the
-  // 🔊 speaking indicator. During a live repeat cycle, showRepeatChip
-  // is true and this evaluates false, so the repeat chip stays visible.
+  // Navigation-mode card pronunciation, no live repeat chip:
+  // collapse the pill to just the 🔊 speaking indicator.
   const pillSpeakingOnly =
     isSpeaking &&
     !isStudying &&
@@ -3136,6 +3130,20 @@ const App = () => {
                     Show SVG canvas border
                   </label>
                 </div>
+
+                <div className="setting-item">
+                  <button
+                    type="button"
+                    className="stats-open-button"
+                    onClick={openStats}
+                    aria-label="Open statistics window"
+                  >
+                    📊 Statistics
+                  </button>
+                  <small style={{ color: '#aaa', fontSize: '0.7rem', display: 'block', marginTop: '0.3rem' }}>
+                    Mismatched words across all Repeat-After-Me sessions
+                  </small>
+                </div>
               </div>
             </div>
             <div className="settings-footer">
@@ -3250,6 +3258,126 @@ const App = () => {
                 disabled={isLoading}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isStatsOpen && (
+        <div
+          className="settings-overlay"
+          onClick={closeStats}
+          role="presentation"
+        >
+          <div
+            className="settings-modal stats-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stats-title"
+          >
+            <div className="settings-header">
+              <h2 id="stats-title">📊 Mismatched Words Statistics</h2>
+              <button
+                className="settings-close"
+                onClick={closeStats}
+                aria-label="Close statistics"
+                title="Close"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+
+            <div className="settings-content">
+              {isLoadingStats && (
+                <div className="setting-item">
+                  <small style={{ color: '#aaa', fontSize: '0.9rem' }}>Loading…</small>
+                </div>
+              )}
+
+              {!isLoadingStats && statsError && (
+                <div className="setting-item">
+                  <small style={{ color: '#f44336', fontSize: '0.85rem' }}>
+                    ⚠️ {statsError}
+                  </small>
+                </div>
+              )}
+
+              {!isLoadingStats && !statsError && statsData && Object.keys(statsData).length === 0 && (
+                <div className="setting-item">
+                  <small style={{ color: '#aaa', fontSize: '0.9rem' }}>
+                    No statistics recorded yet.
+                  </small>
+                </div>
+              )}
+
+              {!isLoadingStats && !statsError && statsData && Object.keys(statsData).length > 0 && (
+                <table className="stats-table">
+                  <thead>
+                    <tr>
+                      <th>Word</th>
+                      <th>Attempts</th>
+                      <th>Matched</th>
+                      <th>Mismatched</th>
+                      <th>Recognized as</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(statsData)
+                      .sort((a, b) => b[1].attempts - a[1].attempts)
+                      .map(([word, entry]) => {
+                        const buckets = Object.entries(entry.unmatched || {})
+                          .sort((a, b) => b[1] - a[1]);
+                        return (
+                          <tr key={word}>
+                            <td className="stats-word">{word}</td>
+                            <td>{entry.attempts}</td>
+                            <td className="stats-matched">{entry.matched}</td>
+                            <td className="stats-mismatched">{entry.mismatched}</td>
+                            <td>
+                              {buckets.length === 0 ? (
+                                <span style={{ color: '#888' }}>—</span>
+                              ) : (
+                                <ul className="stats-buckets">
+                                  {buckets.map(([heard, count]) => (
+                                    <li key={heard || '__empty__'}>
+                                      <span className="stats-bucket-heard">
+                                        {heard === '' ? '(silence)' : heard}
+                                      </span>
+                                      <span className="stats-bucket-count">×{count}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="settings-footer">
+              <button
+                className="settings-cancel"
+                onClick={closeStats}
+              >
+                Close
+              </button>
+              <button
+                className="settings-save"
+                onClick={async () => {
+                  try {
+                    await fetch('/api/raf-stats', { method: 'DELETE' });
+                    setStatsData({});
+                  } catch (err) {
+                    setStatsError(err.message || 'Failed to clear statistics');
+                  }
+                }}
+              >
+                🗑️ Clear
               </button>
             </div>
           </div>
