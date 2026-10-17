@@ -155,11 +155,31 @@
 //       "Suggestions for improvement: bogatyrev.viktor@gmail.com"
 //   • The footer button is labelled "Ok" (Windows convention).
 // App.jsx - FIXED (credit modal email link):
-//   • The email link no longer shows the browser's anchor underline,
-//     which at small sizes reads visually as an underscore between
-//     "bogatyrev" and "viktor".
-//   • The link is styled with textDecoration: 'none' and gains an
-//     underline only on hover, so it still looks clickable.
+//   • The email link no longer shows the browser's anchor underline.
+// App.jsx - CHANGED (Settings → Study Settings order):
+//   • "🎤 Repeat after me" is now the FIRST block in Study Settings.
+//   • "Random pair of cards study" has moved BELOW the Repeat-after-me
+//     block (including its conditional sub-items).
+//   • "Study Time per Card (seconds):" and
+//     "Auto-pronounce words during study" follow after.
+// App.jsx - CHANGED (Settings footer):
+//   • "📂 Open Settings" and "Save Settings" have been MOVED OUT of the
+//     modal footer and now render inside the "Card Appearance" section,
+//     immediately below the "📊 Statistics" button.
+//   • The modal footer now only contains "Ok" and "Cancel".
+// App.jsx - NEW (Hide options below):
+//   • A new checkbox "Hide options below" sits at the bottom of the
+//     Study Settings section (above Voice Settings).
+//   • When ticked, the entire content of Voice Settings, Display Options,
+//     Alerts and Card Appearance is hidden. Ticking it again restores them.
+//   • Persisted like every other setting via saveSettings / loadSettingsFromFile.
+// App.jsx - DEFAULT (Hide options below):
+//   • "Hide options below" now defaults to CHECKED (true), so on first
+//     load only Study Settings and the checkbox itself are visible.
+//     Users can untick it to reveal Voice Settings, Display Options,
+//     Alerts and Card Appearance.
+// App.jsx - REMOVED: "📖 Each card pulses during study" note from
+//                 Study Settings.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -554,6 +574,7 @@ const App = () => {
     repeatOnWordsNotEqual: false,
     hideAlerts: true,
     invisibleTopBar: true,
+    hideOptionsBelow: true,
   });
 
   const singularSvgRef = useRef(null);
@@ -1728,6 +1749,7 @@ const App = () => {
     repeatOnWordsNotEqual: { type: 'boolean', default: false },
     hideAlerts: { type: 'boolean', default: true },
     invisibleTopBar: { type: 'boolean', default: true },
+    hideOptionsBelow: { type: 'boolean', default: true },
   };
 
   const validateSettings = (raw) => {
@@ -2842,27 +2864,6 @@ const App = () => {
             <div className="settings-content">
               <div className="settings-section">
                 <h3>Study Settings</h3>
-                <div className="setting-item">
-                  <label htmlFor="setting-studyTime">Study Time per Card (seconds):</label>
-                  <input id="setting-studyTime" type="number" value={settings.studyTime}
-                    onChange={(e) => handleSettingChange('studyTime', parseInt(e.target.value) || 10)}
-                    min="3" max="60" step="1" />
-                </div>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input type="checkbox" checked={settings.autoPronounce}
-                      onChange={(e) => handleSettingChange('autoPronounce', e.target.checked)} />
-                    Auto-pronounce words during study
-                  </label>
-                </div>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input type="checkbox" checked={settings.randomOrder}
-                      onChange={(e) => handleSettingChange('randomOrder', e.target.checked)} />
-                    Random pair of cards study (shuffle all records)
-                  </label>
-                </div>
-
                 <div className="setting-item checkbox">
                   <label>
                     <input
@@ -2926,251 +2927,301 @@ const App = () => {
                   </div>
                 )}
 
-                <div className="setting-item">
-                  <small style={{ color: '#aaa', fontSize: '0.7rem' }}>📖 Each card pulses during study</small>
+                <div className="setting-item checkbox">
+                  <label>
+                    <input type="checkbox" checked={settings.randomOrder}
+                      onChange={(e) => handleSettingChange('randomOrder', e.target.checked)} />
+                    Random pair of cards study (shuffle all records)
+                  </label>
                 </div>
-              </div>
 
-              <div className="settings-section">
-                <h3>Voice Settings</h3>
                 <div className="setting-item">
-                  <label htmlFor="setting-voice">Select Voice:</label>
-                  <select id="setting-voice" value={settings.selectedVoiceName}
-                    onChange={(e) => handleVoiceChange(e.target.value)}
-                    disabled={!voicesLoaded}
-                    style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '220px', cursor: voicesLoaded ? 'pointer' : 'not-allowed', opacity: voicesLoaded ? 1 : 0.6 }}>
-                    <option value="">-- Select a voice --</option>
-                    {availableVoices.map((voice) => (<option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>))}
-                  </select>
-                </div>
-                <div className="setting-item">
-                  <button onClick={loadVoices} disabled={isLoadingVoices} aria-busy={isLoadingVoices}
-                    aria-label={voicesLoaded ? 'Voices already loaded' : 'Load available voices'}
-                    style={{ background: '#0078d4', border: 'none', color: 'white', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: isLoadingVoices ? 'wait' : 'pointer', fontSize: '0.9rem', width: 'auto', marginLeft: '0.5rem' }}>
-                    {isLoadingVoices ? 'Loading...' : (voicesLoaded ? '✓ Voices Loaded' : '📢 Load Voices')}
-                  </button>
-                  {!voicesLoaded && (<span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ff9800' }}>⚠️ Required - Click to load</span>)}
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="setting-repeatTimes">Repeat English words:</label>
-                  <input id="setting-repeatTimes" type="number" value={settings.repeatTimes}
-                    onChange={(e) => handleSettingChange('repeatTimes', parseInt(e.target.value) || 3)}
-                    min="1" max="5" step="1"
-                    style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '80px' }} />
-                  <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
+                  <label htmlFor="setting-studyTime">Study Time per Card (seconds):</label>
+                  <input id="setting-studyTime" type="number" value={settings.studyTime}
+                    onChange={(e) => handleSettingChange('studyTime', parseInt(e.target.value) || 10)}
+                    min="3" max="60" step="1" />
                 </div>
                 <div className="setting-item checkbox">
                   <label>
-                    <input type="checkbox" checked={settings.pronounceTranslation}
-                      onChange={(e) => handleSettingChange('pronounceTranslation', e.target.checked)} />
-                    Pronounce translation
+                    <input type="checkbox" checked={settings.autoPronounce}
+                      onChange={(e) => handleSettingChange('autoPronounce', e.target.checked)} />
+                    Auto-pronounce words during study
                   </label>
                 </div>
-                <div className="setting-item">
-                  <label htmlFor="setting-translationVoice">Translation Voice:</label>
-                  <select id="setting-translationVoice" value={settings.translationVoiceName || ""}
-                    onChange={(e) => handleSettingChange('translationVoiceName', e.target.value)}
-                    disabled={!voicesLoaded || !settings.pronounceTranslation}
-                    style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '220px', cursor: (voicesLoaded && settings.pronounceTranslation) ? 'pointer' : 'not-allowed', opacity: (voicesLoaded && settings.pronounceTranslation) ? 1 : 0.6 }}>
-                    <option value="">-- Select a voice --</option>
-                    {availableVoices.map((voice) => (<option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>))}
-                  </select>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="setting-translationRepeatTimes">Repeat translation Voice:</label>
-                  <input id="setting-translationRepeatTimes" type="number" value={settings.translationRepeatTimes}
-                    onChange={(e) => handleSettingChange('translationRepeatTimes', parseInt(e.target.value) || 1)}
-                    min="1" max="5" step="1"
-                    disabled={!settings.pronounceTranslation}
-                    style={{ background: settings.pronounceTranslation ? '#3c3c3c' : '#2a2a2a', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '80px', cursor: settings.pronounceTranslation ? 'pointer' : 'not-allowed', opacity: settings.pronounceTranslation ? 1 : 0.6 }} />
-                  <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
-                </div>
-                <div className="setting-item">
-                  <small style={{ color: voicesLoaded ? '#4caf50' : '#ff9800', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                    {voicesLoaded ? `✓ Current voice: ${settings.selectedVoiceName || "None selected"}` : '⚠️ Voices not loaded - Click "Load Voices" button'}
-                  </small>
-                </div>
-                {!voiceSupport && (<div className="setting-item"><small style={{ color: '#f44336', fontSize: '0.8rem' }}>⚠️ Voice support not available</small></div>)}
               </div>
 
               <div className="settings-section">
-                <h3>Display Options</h3>
                 <div className="setting-item checkbox">
-                  <label><input type="checkbox" checked={settings.showTranscription}
-                    onChange={(e) => handleSettingChange('showTranscription', e.target.checked)} /> Show Transcription</label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.hideOptionsBelow}
+                      onChange={(e) => handleSettingChange('hideOptionsBelow', e.target.checked)}
+                    />
+                    Hide options below
+                  </label>
                 </div>
-                <div className="setting-item checkbox">
-                  <label><input type="checkbox" checked={settings.showTranslation}
-                    onChange={(e) => handleSettingChange('showTranslation', e.target.checked)} /> Show Translation</label>
-                </div>
-                <div className="setting-item checkbox">
-                  <label><input type="checkbox" checked={settings.loadLessonLocally}
-                    onChange={(e) => handleSettingChange('loadLessonLocally', e.target.checked)} /> Load lesson locally</label>
-                </div>
-                <div className="setting-item checkbox">
-                  <label><input type="checkbox" checked={settings.invisibleTopBar}
-                    onChange={(e) => handleSettingChange('invisibleTopBar', e.target.checked)} /> Invisible Top bar</label>
-                </div>
+              </div>
 
-                {displayInfo && (
-                  <div
-                    className="setting-item"
-                    style={{
-                      display: 'block',
-                      fontFamily: 'monospace',
-                      fontSize: '0.78rem',
-                      lineHeight: 1.5,
-                      color: '#aaa',
-                      background: '#1f1f1f',
-                      border: '1px solid #3c3c3c',
-                      borderRadius: '8px',
-                      padding: '0.6rem 0.8rem',
-                      marginTop: '0.4rem',
-                    }}
-                  >
-                    <div><strong style={{ color: '#e0e0e0' }}>CSS px — layout viewport</strong></div>
-                    <div>
-                      {displayInfo.viewportCssWidth} × {displayInfo.viewportCssHeight} px
-                      {' '}(client: {displayInfo.viewportClientWidth} × {displayInfo.viewportClientHeight})
+              {!settings.hideOptionsBelow && (
+                <>
+                  <div className="settings-section">
+                    <h3>Voice Settings</h3>
+                    <div className="setting-item">
+                      <label htmlFor="setting-voice">Select Voice:</label>
+                      <select id="setting-voice" value={settings.selectedVoiceName}
+                        onChange={(e) => handleVoiceChange(e.target.value)}
+                        disabled={!voicesLoaded}
+                        style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '220px', cursor: voicesLoaded ? 'pointer' : 'not-allowed', opacity: voicesLoaded ? 1 : 0.6 }}>
+                        <option value="">-- Select a voice --</option>
+                        {availableVoices.map((voice) => (<option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>))}
+                      </select>
+                    </div>
+                    <div className="setting-item">
+                      <button onClick={loadVoices} disabled={isLoadingVoices} aria-busy={isLoadingVoices}
+                        aria-label={voicesLoaded ? 'Voices already loaded' : 'Load available voices'}
+                        style={{ background: '#0078d4', border: 'none', color: 'white', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: isLoadingVoices ? 'wait' : 'pointer', fontSize: '0.9rem', width: 'auto', marginLeft: '0.5rem' }}>
+                        {isLoadingVoices ? 'Loading...' : (voicesLoaded ? '✓ Voices Loaded' : '📢 Load Voices')}
+                      </button>
+                      {!voicesLoaded && (<span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ff9800' }}>⚠️ Required - Click to load</span>)}
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-repeatTimes">Repeat English words:</label>
+                      <input id="setting-repeatTimes" type="number" value={settings.repeatTimes}
+                        onChange={(e) => handleSettingChange('repeatTimes', parseInt(e.target.value) || 3)}
+                        min="1" max="5" step="1"
+                        style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '80px' }} />
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
+                    </div>
+                    <div className="setting-item checkbox">
+                      <label>
+                        <input type="checkbox" checked={settings.pronounceTranslation}
+                          onChange={(e) => handleSettingChange('pronounceTranslation', e.target.checked)} />
+                        Pronounce translation
+                      </label>
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-translationVoice">Translation Voice:</label>
+                      <select id="setting-translationVoice" value={settings.translationVoiceName || ""}
+                        onChange={(e) => handleSettingChange('translationVoiceName', e.target.value)}
+                        disabled={!voicesLoaded || !settings.pronounceTranslation}
+                        style={{ background: '#3c3c3c', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '220px', cursor: (voicesLoaded && settings.pronounceTranslation) ? 'pointer' : 'not-allowed', opacity: (voicesLoaded && settings.pronounceTranslation) ? 1 : 0.6 }}>
+                        <option value="">-- Select a voice --</option>
+                        {availableVoices.map((voice) => (<option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>))}
+                      </select>
+                    </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-translationRepeatTimes">Repeat translation Voice:</label>
+                      <input id="setting-translationRepeatTimes" type="number" value={settings.translationRepeatTimes}
+                        onChange={(e) => handleSettingChange('translationRepeatTimes', parseInt(e.target.value) || 1)}
+                        min="1" max="5" step="1"
+                        disabled={!settings.pronounceTranslation}
+                        style={{ background: settings.pronounceTranslation ? '#3c3c3c' : '#2a2a2a', border: '1px solid #555', color: 'white', padding: '0.4rem 0.6rem', borderRadius: '6px', fontSize: '0.9rem', width: '80px', cursor: settings.pronounceTranslation ? 'pointer' : 'not-allowed', opacity: settings.pronounceTranslation ? 1 : 0.6 }} />
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#aaa' }}>times</span>
+                    </div>
+                    <div className="setting-item">
+                      <small style={{ color: voicesLoaded ? '#4caf50' : '#ff9800', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {voicesLoaded ? `✓ Current voice: ${settings.selectedVoiceName || "None selected"}` : '⚠️ Voices not loaded - Click "Load Voices" button'}
+                      </small>
+                    </div>
+                    {!voiceSupport && (<div className="setting-item"><small style={{ color: '#f44336', fontSize: '0.8rem' }}>⚠️ Voice support not available</small></div>)}
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Display Options</h3>
+                    <div className="setting-item checkbox">
+                      <label><input type="checkbox" checked={settings.showTranscription}
+                        onChange={(e) => handleSettingChange('showTranscription', e.target.checked)} /> Show Transcription</label>
+                    </div>
+                    <div className="setting-item checkbox">
+                      <label><input type="checkbox" checked={settings.showTranslation}
+                        onChange={(e) => handleSettingChange('showTranslation', e.target.checked)} /> Show Translation</label>
+                    </div>
+                    <div className="setting-item checkbox">
+                      <label><input type="checkbox" checked={settings.loadLessonLocally}
+                        onChange={(e) => handleSettingChange('loadLessonLocally', e.target.checked)} /> Load lesson locally</label>
+                    </div>
+                    <div className="setting-item checkbox">
+                      <label><input type="checkbox" checked={settings.invisibleTopBar}
+                        onChange={(e) => handleSettingChange('invisibleTopBar', e.target.checked)} /> Invisible Top bar</label>
                     </div>
 
-                    <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Screen resolution</strong></div>
-                    <div>
-                      CSS: {displayInfo.screenCssWidth} × {displayInfo.screenCssHeight} px
-                    </div>
-                    <div>
-                      Physical: {displayInfo.screenDeviceWidth} × {displayInfo.screenDeviceHeight} px
-                      {' '}(DPR {displayInfo.devicePixelRatio})
-                    </div>
+                    {displayInfo && (
+                      <div
+                        className="setting-item"
+                        style={{
+                          display: 'block',
+                          fontFamily: 'monospace',
+                          fontSize: '0.78rem',
+                          lineHeight: 1.5,
+                          color: '#aaa',
+                          background: '#1f1f1f',
+                          border: '1px solid #3c3c3c',
+                          borderRadius: '8px',
+                          padding: '0.6rem 0.8rem',
+                          marginTop: '0.4rem',
+                        }}
+                      >
+                        <div><strong style={{ color: '#e0e0e0' }}>CSS px — layout viewport</strong></div>
+                        <div>
+                          {displayInfo.viewportCssWidth} × {displayInfo.viewportCssHeight} px
+                          {' '}(client: {displayInfo.viewportClientWidth} × {displayInfo.viewportClientHeight})
+                        </div>
 
-                    <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Screen orientation</strong></div>
-                    <div>
-                      {displayInfo.screenOrientationType || 'n/a'}
-                      {displayInfo.screenOrientationAngle != null ? ` · ${displayInfo.screenOrientationAngle}°` : ''}
-                    </div>
+                        <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Screen resolution</strong></div>
+                        <div>
+                          CSS: {displayInfo.screenCssWidth} × {displayInfo.screenCssHeight} px
+                        </div>
+                        <div>
+                          Physical: {displayInfo.screenDeviceWidth} × {displayInfo.screenDeviceHeight} px
+                          {' '}(DPR {displayInfo.devicePixelRatio})
+                        </div>
 
-                    <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Effective layout</strong></div>
-                    <div>
-                      auto align: {settings.autoAlign ? 'ON' : 'OFF'}
-                      {' '}· orientation: {isLandscape ? 'landscape' : 'portrait'}
-                    </div>
-                    <div>
-                      top bar (measured): {Math.round(effectiveTopBarHeight)}px
-                      {' '}· top panel: {effectiveTopPanelWidth}px
-                    </div>
-                    <div>
-                      card: {effectiveCardWidth}×{effectiveCardHeight}px
-                      {' '}· gap between cards: {effectiveGap}px
-                    </div>
-                    {settings.autoAlign && (
-                      <div>
-                        gap top bar → cards: {topGap}px
-                        {' '}· gap cards → bottom: {bottomGap}px
-                        {' '}· side inset: {sideInset}px
+                        <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Screen orientation</strong></div>
+                        <div>
+                          {displayInfo.screenOrientationType || 'n/a'}
+                          {displayInfo.screenOrientationAngle != null ? ` · ${displayInfo.screenOrientationAngle}°` : ''}
+                        </div>
+
+                        <div style={{ marginTop: '0.5rem' }}><strong style={{ color: '#e0e0e0' }}>Effective layout</strong></div>
+                        <div>
+                          auto align: {settings.autoAlign ? 'ON' : 'OFF'}
+                          {' '}· orientation: {isLandscape ? 'landscape' : 'portrait'}
+                        </div>
+                        <div>
+                          top bar (measured): {Math.round(effectiveTopBarHeight)}px
+                          {' '}· top panel: {effectiveTopPanelWidth}px
+                        </div>
+                        <div>
+                          card: {effectiveCardWidth}×{effectiveCardHeight}px
+                          {' '}· gap between cards: {effectiveGap}px
+                        </div>
+                        {settings.autoAlign && (
+                          <div>
+                            gap top bar → cards: {topGap}px
+                            {' '}· gap cards → bottom: {bottomGap}px
+                            {' '}· side inset: {sideInset}px
+                          </div>
+                        )}
+                        <div style={{ marginTop: '0.5rem' }}>
+                          listening min: {LISTEN_MIN_MS} ms
+                          {' '}· silence window: {SILENCE_DEBOUNCE_MS} ms
+                        </div>
                       </div>
                     )}
-                    <div style={{ marginTop: '0.5rem' }}>
-                      listening min: {LISTEN_MIN_MS} ms
-                      {' '}· silence window: {SILENCE_DEBOUNCE_MS} ms
+                  </div>
+
+                  <div className="settings-section">
+                    <h3>Alerts</h3>
+                    <div className="setting-item checkbox">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={settings.hideAlerts}
+                          onChange={(e) => handleSettingChange('hideAlerts', e.target.checked)}
+                        />
+                        Hide alerts
+                      </label>
+                    </div>
+                    <div className="setting-item">
+                      <small style={{ color: '#aaa', fontSize: '0.7rem' }}>
+                        When checked, informational popups are suppressed. Session results and errors are still shown.
+                      </small>
                     </div>
                   </div>
-                )}
-              </div>
 
-              <div className="settings-section">
-                <h3>Alerts</h3>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={settings.hideAlerts}
-                      onChange={(e) => handleSettingChange('hideAlerts', e.target.checked)}
-                    />
-                    Hide alerts
-                  </label>
-                </div>
-                <div className="setting-item">
-                  <small style={{ color: '#aaa', fontSize: '0.7rem' }}>
-                    When checked, informational popups are suppressed. Session results and errors are still shown.
-                  </small>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Card Appearance</h3>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={settings.autoAlign}
-                      onChange={(e) => handleSettingChange('autoAlign', e.target.checked)}
-                    />
-                    Auto align elements
-                  </label>
-                </div>
-
-                <div className="setting-item">
-                  <label htmlFor="setting-cardGap">Gap between cards (px):</label>
-                  <input id="setting-cardGap" type="number" value={settings.cardGap}
-                    onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 10)}
-                    min="5" max="100" step="5" />
-                </div>
-
-                {!settings.autoAlign && (
-                  <>
-                    <div className="setting-item">
-                      <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
-                      <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
-                        onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
-                        min="300" max="2000" step="10" />
+                  <div className="settings-section">
+                    <h3>Card Appearance</h3>
+                    <div className="setting-item checkbox">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={settings.autoAlign}
+                          onChange={(e) => handleSettingChange('autoAlign', e.target.checked)}
+                        />
+                        Auto align elements
+                      </label>
                     </div>
-                    <div className="setting-item">
-                      <label htmlFor="setting-cardWidth">Card Width (px):</label>
-                      <input id="setting-cardWidth" type="number" value={settings.cardWidth}
-                        onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
-                        min="150" max="800" step="10" />
-                    </div>
-                    <div className="setting-item">
-                      <label htmlFor="setting-cardHeight">Card Height (px):</label>
-                      <input id="setting-cardHeight" type="number" value={settings.cardHeight}
-                        onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
-                        min="150" max="800" step="10" />
-                    </div>
-                  </>
-                )}
 
-                <div className="setting-item">
-                  <label htmlFor="setting-fontSize">Font Size (px):</label>
-                  <input id="setting-fontSize" type="number" value={settings.fontSize}
-                    onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)}
-                    min="8" max="48" step="2" />
-                </div>
-                <div className="setting-item checkbox">
-                  <label>
-                    <input type="checkbox" checked={settings.showSvgBorder}
-                      onChange={(e) => handleSettingChange('showSvgBorder', e.target.checked)} />
-                    Show SVG canvas border
-                  </label>
-                </div>
+                    <div className="setting-item">
+                      <label htmlFor="setting-cardGap">Gap between cards (px):</label>
+                      <input id="setting-cardGap" type="number" value={settings.cardGap}
+                        onChange={(e) => handleSettingChange('cardGap', parseInt(e.target.value) || 10)}
+                        min="5" max="100" step="5" />
+                    </div>
 
-                <div className="setting-item">
-                  <button
-                    type="button"
-                    className="stats-open-button"
-                    onClick={openStats}
-                    aria-label="Open statistics window"
-                  >
-                    📊 Statistics
-                  </button>
-                  <small style={{ color: '#aaa', fontSize: '0.7rem', display: 'block', marginTop: '0.3rem' }}>
-                    Mismatched words across all Repeat-After-Me sessions
-                  </small>
-                </div>
-              </div>
+                    {!settings.autoAlign && (
+                      <>
+                        <div className="setting-item">
+                          <label htmlFor="setting-topPanelWidth">Top panel width (px):</label>
+                          <input id="setting-topPanelWidth" type="number" value={settings.topPanelWidth}
+                            onChange={(e) => handleSettingChange('topPanelWidth', parseInt(e.target.value) || 916)}
+                            min="300" max="2000" step="10" />
+                        </div>
+                        <div className="setting-item">
+                          <label htmlFor="setting-cardWidth">Card Width (px):</label>
+                          <input id="setting-cardWidth" type="number" value={settings.cardWidth}
+                            onChange={(e) => handleSettingChange('cardWidth', parseInt(e.target.value) || 400)}
+                            min="150" max="800" step="10" />
+                        </div>
+                        <div className="setting-item">
+                          <label htmlFor="setting-cardHeight">Card Height (px):</label>
+                          <input id="setting-cardHeight" type="number" value={settings.cardHeight}
+                            onChange={(e) => handleSettingChange('cardHeight', parseInt(e.target.value) || 400)}
+                            min="150" max="800" step="10" />
+                        </div>
+                      </>
+                    )}
+
+                    <div className="setting-item">
+                      <label htmlFor="setting-fontSize">Font Size (px):</label>
+                      <input id="setting-fontSize" type="number" value={settings.fontSize}
+                        onChange={(e) => handleSettingChange('fontSize', parseInt(e.target.value) || 32)}
+                        min="8" max="48" step="2" />
+                    </div>
+                    <div className="setting-item checkbox">
+                      <label>
+                        <input type="checkbox" checked={settings.showSvgBorder}
+                          onChange={(e) => handleSettingChange('showSvgBorder', e.target.checked)} />
+                        Show SVG canvas border
+                      </label>
+                    </div>
+
+                    <div className="setting-item">
+                      <button
+                        type="button"
+                        className="stats-open-button"
+                        onClick={openStats}
+                        aria-label="Open statistics window"
+                      >
+                        📊 Statistics
+                      </button>
+                      <small style={{ color: '#aaa', fontSize: '0.7rem', display: 'block', marginTop: '0.3rem' }}>
+                        Mismatched words across all Repeat-After-Me sessions
+                      </small>
+                    </div>
+
+                    <div className="button-group margin-top">
+                      <button
+                        type="button"
+                        className="settings-open"
+                        onClick={handleOpenSettingsFile}
+                      >
+                        📂 Open Settings
+                      </button>
+                      <button
+                        type="button"
+                        className="settings-save"
+                        onClick={saveSettings}
+                      >
+                        Save Settings
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="settings-footer">
-              <button className="settings-open" onClick={handleOpenSettingsFile}>📂 Open Settings</button>
-              <button className="settings-save" onClick={saveSettings}>Save Settings</button>
               <button className="settings-ok" onClick={applyAndClose}>Ok</button>
               <button className="settings-cancel" onClick={closeSettings}>Cancel</button>
             </div>
