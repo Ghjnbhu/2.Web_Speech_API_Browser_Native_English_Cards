@@ -149,6 +149,17 @@
 //   • Settings → "📊 Statistics" button opens a modal that GETs
 //     /api/raf-stats and renders a per-word table.
 //   • Store lives at public/lessons/raf-stats.json on the server.
+// App.jsx - NEW (credit modal):
+//   • "Eco Cards" in the header is now a <button>.
+//   • Clicking it opens a small modal with the credit line:
+//       "Suggestions for improvement: bogatyrev.viktor@gmail.com"
+//   • The footer button is labelled "Ok" (Windows convention).
+// App.jsx - FIXED (credit modal email link):
+//   • The email link no longer shows the browser's anchor underline,
+//     which at small sizes reads visually as an underscore between
+//     "bogatyrev" and "viktor".
+//   • The link is styled with textDecoration: 'none' and gains an
+//     underline only on hover, so it still looks clickable.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -512,6 +523,9 @@ const App = () => {
   const [statsData, setStatsData] = useState(null);
   const [statsError, setStatsError] = useState('');
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+
+  // Credit (about) modal
+  const [isCreditOpen, setIsCreditOpen] = useState(false);
 
   const displayInfo = useDisplayInfo();
 
@@ -2559,7 +2573,15 @@ const App = () => {
               <span aria-hidden="true">{settings.theme === 'dark' ? '☀️' : '🌙'}</span>
             </button>
 
-            <div className="header-title">Eco Cards</div>
+            <button
+              type="button"
+              className="header-title header-title-button"
+              onClick={() => setIsCreditOpen(true)}
+              aria-label="About Eco Cards"
+              title="About Eco Cards"
+            >
+              Eco Cards
+            </button>
 
             {!isStudying && (
               <button
@@ -3378,6 +3400,57 @@ const App = () => {
                 }}
               >
                 🗑️ Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCreditOpen && (
+        <div
+          className="settings-overlay"
+          onClick={() => setIsCreditOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="settings-modal credit-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="credit-title"
+          >
+            <div className="settings-header">
+              <h2 id="credit-title">🌱 Eco Cards</h2>
+              <button
+                className="settings-close"
+                onClick={() => setIsCreditOpen(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+
+            <div className="settings-content">
+              <p style={{ margin: 0, lineHeight: 1.6, color: '#e0e0e0' }}>
+                Suggestions for improvement:{' '}
+                <a
+                  href="mailto:bogatyrev.viktor@gmail.com?subject=Eco%20Cards%20suggestion"
+                  style={{ color: '#4da3ff', textDecoration: 'none' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                >
+                  bogatyrev.viktor@gmail.com
+                </a>
+              </p>
+            </div>
+
+            <div className="settings-footer">
+              <button
+                className="settings-ok"
+                onClick={() => setIsCreditOpen(false)}
+              >
+                Ok
               </button>
             </div>
           </div>

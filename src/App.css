@@ -15,32 +15,19 @@
        • LANDSCAPE: single row.
        • PORTRAIT (auto-align ON): two rows — controls on top, status pill below.
    - NEW: "Auto align elements" checkbox.
-     When ON:
-       • The "Gap between cards (px)" field REMAINS VISIBLE.
-         Its default value is 10px.
-         It represents ALL paddings around the cards:
-           – top bar → cards
-           – cards → bottom
-           – between the two cards
-           – left/right inset of the cards row
-       • LANDSCAPE: two cards side by side.
-       • PORTRAIT: each card on its OWN ROW (stacked).
-         Card height is derived from the ACTUAL measured top-bar height,
-         so both cards exactly fill the remaining space.
-     When OFF: raw numeric settings are used as-is.
    - FIXED: In portrait auto-align, the cards-row horizontal padding now uses
-            --card-gap instead of a hardcoded 12px, so the left/right inset
-            matches the top/bottom/gap value.
-   - FIXED: .top-bar box-shadow removed and replaced with a subtle bottom
-            border so the visible bottom edge of the bar ends exactly where
-            the auto-align gap begins (no visual "spill" into the gap).
+            --card-gap instead of a hardcoded 12px.
+   - FIXED: .top-bar box-shadow removed and replaced with a subtle bottom border.
    - NEW: When the status pill button is disabled, its leading 🌐 / 📁 icon
-          is hidden (aria-hidden anyway), leaving only the meaningful state
-          text inside the pill.
+          is hidden.
    - NEW: ".app.invisible-top-bar .top-bar" makes the top bar transparent
-          (and clears its bottom border) when the "Invisible Top bar"
-          checkbox is enabled in Settings → Display Options. Applies to
-          both dark and light themes.
+          when the "Invisible Top bar" checkbox is enabled.
+   - NEW (Clickable header title + credit modal):
+       The "Eco Cards" title is now a <button> that opens a small modal
+       with the credit line "Suggestions for improvement:
+       bogatyrev.viktor@gmail.com". The email link uses text-decoration:none
+       so the browser's anchor underline does not read as an underscore.
+       The modal's footer button is labelled "Ok" (Windows convention).
 */
 
 /* ============================================================
@@ -96,8 +83,6 @@ body.light { background: #f5f5f5; color: #333; }
   min-height: var(--top-bar-height, 52px);
   padding: 8px 12px;
   background: #484348a8;
-  /* FIXED: shadow removed so the visible bottom edge of the bar
-     ends exactly at the auto-align gap (no visual spill). */
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
@@ -178,13 +163,10 @@ body.light { background: #f5f5f5; color: #333; }
 
 .header-db-info-button:disabled {
   cursor: not-allowed;
-  background: transparent;   /* show the top bar through it → exact match */
+  background: transparent;
   border-color: transparent;
 }
 
-/* ✅ Hide the leading 🌐 / 📁 icon while the pill is disabled.
-   The icon span already carries aria-hidden="true", so hiding it
-   visually has no screen-reader side effect. */
 .header-db-info-button:disabled .db-info-label {
   display: none;
 }
@@ -594,8 +576,8 @@ body.light .recognized-chip.recognized-error {
 }
 
 .svg-wrapper {
-  flex: 1 1 auto;      /* grows to fill leftover space, shrinks when translation needs room */
-  min-height: 40px;    /* SVG never disappears entirely */
+  flex: 1 1 auto;
+  min-height: 40px;
   min-width: 0;
   max-height: 100%;
   max-width: 100%;
@@ -629,20 +611,15 @@ body.light .svg-wrapper.svg-bordered { border-color: #0078d4; }
   font-size: 18px;
   color: #fff;
   margin: 0;
-  /* Auto-grow when wrapped, auto-shrink when not needed. */
   flex: 0 1 auto;
   text-align: center;
   width: 100%;
   white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
-  /* Cap at ~4 lines so a runaway translation can't push the SVG out. */
   max-height: 5.2em;
   line-height: 1.2;
   overflow: hidden;
-  /* Optional: soft fade on the last visible line. Uncomment to enable. */
-  /* -webkit-mask-image: linear-gradient(#000 80%, transparent); */
-  /* mask-image: linear-gradient(#000 80%, transparent); */
 }
 
 /* ============================================================
@@ -1074,9 +1051,6 @@ body.light .active-pulse {
    Only applies while auto-align is ON (data-auto-align="on").
    ============================================================ */
 
-/* ---- PORTRAIT: TWO-ROW TOP BAR ----
-   Row 1: theme + title + settings + nav + start/stop (and chip).
-   Row 2: status pill (Load lesson / DB info). */
 [data-auto-align="on"][data-orientation="portrait"] .top-bar {
   flex-wrap: wrap;
   align-items: center;
@@ -1118,7 +1092,6 @@ body.light .active-pulse {
   max-width: none;
 }
 
-/* ---- LANDSCAPE: single-row top bar, two cards side by side ---- */
 [data-auto-align="on"][data-orientation="landscape"] .top-bar-wrapper {
   width: 100%;
   max-width: 100%;
@@ -1157,12 +1130,6 @@ body.light .active-pulse {
   max-height: var(--card-height);
 }
 
-/* ---- PORTRAIT: cards on their own rows ----
-   Gap top bar → cards:    var(--landscape-top-gap)  (= card-gap)
-   Gap between cards:      var(--card-gap)           (= card-gap)
-   Gap cards → bottom:     var(--landscape-bottom)   (= card-gap)
-   Left/right inset:       var(--card-gap)           (= card-gap)
-*/
 [data-auto-align="on"][data-orientation="portrait"] .page-content {
   padding: var(--landscape-top-gap, 10px) 0 var(--landscape-bottom, 10px) 0;
   box-sizing: border-box;
@@ -1188,7 +1155,6 @@ body.light .active-pulse {
   max-height: var(--card-height);
 }
 
-/* When auto-align is OFF, honor the raw numeric settings as-is. */
 [data-auto-align="off"] .top-bar-wrapper {
   width: var(--top-panel-width, 916px);
   max-width: none;
@@ -1206,18 +1172,12 @@ body.light .active-pulse {
 
 /* ============================================================
    INVISIBLE TOP BAR
-   When the app root carries .invisible-top-bar, the top bar
-   becomes fully transparent (so the page background shows
-   through). When the flag is off, the base .top-bar rule
-   applies the default #484348a8 background.
    ============================================================ */
 .app.invisible-top-bar .top-bar {
   background: transparent;
   border-bottom-color: transparent;
 }
 
-/* Keep the light-theme override from re-applying a visible
-   white bar when the flag is on. */
 body.light .app.invisible-top-bar .top-bar {
   background: transparent;
   border-bottom-color: transparent;
@@ -1332,4 +1292,48 @@ body.light .stats-bucket-heard {
 }
 body.light .stats-bucket-count {
   color: #0d47a1;
+}
+
+/* ============================================================
+   CLICKABLE HEADER TITLE + CREDIT MODAL
+   ============================================================ */
+
+.header-title-button {
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  text-align: left;
+}
+
+@media (hover: hover) {
+  .header-title-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  body.light .header-title-button:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.header-title-button:focus-visible {
+  outline: 2px solid #4da3ff;
+  outline-offset: 2px;
+}
+
+body.light .header-title-button {
+  color: #333;
+}
+
+.credit-modal {
+  max-width: 480px;
+}
+
+.credit-modal .settings-content {
+  padding-top: 1.2rem;
+  padding-bottom: 1.2rem;
 }

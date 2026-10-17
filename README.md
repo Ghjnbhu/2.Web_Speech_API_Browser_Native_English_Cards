@@ -96,4 +96,22 @@ translation → advance	skipped (advances without speaking)     neither	silent n
 
 DB pill button
 
-<project-root>/public/lessons/raf-stats.json
+<project-root>/public/lessons/raf-stats.json - for local server
+<project-root>/api/raf-stats.json - for vercel
+
+Upstash Redis Free Tier (current)
+Limit	Free Tier
+Price	$0 / month
+Data size	256 MB
+Monthly commands	500,000
+Monthly bandwidth	10 GB
+Max commands / sec	10,000
+Databases	1
+Credit card required?	No
+
+SSR/SEO имеет смысл, если:
+Вы хотите, чтобы уроки находились через Google (например, «английские карточки животные»)
+У вас есть лендинг или блог с описанием приложения
+Вы планируете публичный сервис с регистрацией пользователей
+
+ SSR для скорости 
