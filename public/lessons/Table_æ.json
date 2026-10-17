@@ -30,7 +30,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 2,
@@ -65,7 +65,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 3,
@@ -100,7 +100,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 4,
@@ -135,7 +135,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 5,
@@ -170,7 +170,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 6,
@@ -205,7 +205,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 7,
@@ -240,7 +240,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 8,
@@ -275,7 +275,7 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     },
     {
       "id": 9,
@@ -297,7 +297,7 @@
       "card2": {
         "word": "",
         "transcription": "/ æ /п",
-        "translation": "a произносится как \"э\" широкое, среднее между \"э\" и \"а\"",
+        "translation": "a в этих словах произносится как \"э\" широкое, среднее между \"э\" и \"а\"",
         "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(.64 98.23) scale(1.13 1)\" fill=\"#3d4fa2\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"110.55\"><tspan x=\"0\" y=\"0\">æ</tspan></text>\n  <text transform=\"translate(3.72 39.91) scale(.91 1)\" fill=\"#e8194e\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"71.55\"><tspan x=\"0\" y=\"0\">а </tspan></text>\n  <text transform=\"translate(27.07 39.91) scale(.91 1)\" fill=\"#ae509e\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"71.55\"><tspan x=\"0\" y=\"0\">э...</tspan></text>\n</svg>",
         "letterColors": {
           "word": {},
@@ -306,9 +306,9 @@
         }
       },
       "createdAt": "2026-10-10T16:07:31.949Z",
-      "updatedAt": "2026-10-17T19:53:53.705Z"
+      "updatedAt": "2026-10-17T20:21:25.357Z"
     }
   ],
-  "exportDate": "2026-10-17T20:03:18.272Z",
+  "exportDate": "2026-10-17T20:22:12.037Z",
   "version": "1.0"
 }
