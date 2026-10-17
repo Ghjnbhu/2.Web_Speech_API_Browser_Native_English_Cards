@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://2-web-speech-api-browser-native-eng.vercel.app/sitemap.xml
