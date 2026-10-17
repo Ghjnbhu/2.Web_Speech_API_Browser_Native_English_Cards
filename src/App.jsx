@@ -1,185 +1,7 @@
-// App.jsx - FIXED: React 19 StrictMode guard for voice loading
-// App.jsx - SVG XSS via innerHTML and show fixed code
-// App.jsx - loadSettingsFromFile accepts any value for allowed keys
-// App.jsx - renderSvgToContainer regex is fragile
-// App.jsx - No role / aria attributes
-// App.jsx - Fix #20 Revision: Allow Internal <use> References
-// App.jsx - FIXED: header button order — Load DB before Start/Stop
-// App.jsx - FIXED: recognized-word chip shows ONLY the recognized word(s)
-// App.jsx - FIXED: strip trailing punctuation from recognized word
-// App.jsx - FIXED: "Repeat after me" label + inline repeat-times input
-// App.jsx - NEW: navigation-mode click runs repeat-after-me cycle when enabled
-// App.jsx - NEW: "Load lesson locally" checkbox in Display Options
-// App.jsx - NEW: gear button opens Settings modal directly (no menu dropdown)
-// App.jsx - NEW: server mode fetches /lessons/index.json and lists lessons
-// App.jsx - NEW: server mode opens a picker modal on Load DB click
-// App.jsx - CLEANUP: manifest URL is a constant; not in settings or UI
-// App.jsx - NEW: display-info block in Settings (viewport, screen, orientation)
-// App.jsx - NEW: status pill icon reflects loadLessonLocally
-// App.jsx - NEW: status pill is a clickable button; Load DB button removed
-// App.jsx - NEW: "Repeat pronunciation if words not equal" checkbox (repeat-after-me contexts)
-// App.jsx - NEW: status pill shows "ID: n / total" in loaded state
-// App.jsx - REMOVED: "Lesson loaded!" success alert (server mode)
-// App.jsx - RENAMED: repeatOnRecognizeFault → repeatOnWordsNotEqual
-// App.jsx - RENAMED: "Repeat word:" label → "Attempt:"
-// App.jsx - BEHAVIOR:
-//   An "Attempt" = pronounce → listen → recognize → compare → write result.
-//   Repeat-after-me must go through ALL Attempt values per card.
-//   Checkbox ☐ unchecked: on fault, consume the attempt → pronounce again + listen
-//                         for the next attempt. After the last attempt → advance.
-//   Checkbox ✓ checked:   on fault, re-pronounce + listen again WITHOUT consuming
-//                         the attempt (retry the same attempt until match).
-// App.jsx - FIXED: When a DB is loaded (locally or from server), stop any leftover
-//                 pulse on both cards.
-// App.jsx - NEW: In Auto Study + Repeat-after-me, track cards that failed all
-//                 attempts and report them at session completion.
-//                 Report line format: `N. word - "recognized"` (or `N. word -`).
-// App.jsx - NEW: "Auto align elements" checkbox.
-// App.jsx - NEW: When a Repeat-after-me session is active, the status pill
-//                 hides the DB filename and ID info so only the repeat
-//                 indicators (Listening / Matched / Retry / Repeat After Me)
-//                 remain visible.
-// App.jsx - RENAMED: "🎧 Repeat mode" → "🎧 Repeat After Me" in the pill.
-// App.jsx - FIXED: navigation-mode click on an already-pulsing card now
-//                 stops its pronunciation and pulse (toggle behavior).
-// App.jsx - DEFAULT: "Repeat pronunciation if words not equal" now defaults
-//                 to UNCHECKED (false).
-// App.jsx - DEFAULT: when "🎤 Repeat after me" is enabled, "Attempt:" is
-//                 forced to 1 (repeatTimes = 1).
-// App.jsx - FIX #1: SpeechRecognition.startListening now uses continuous: true
-//                 so the engine keeps context across attempts, improving
-//                 recognition of minimal-pair words (e.g. "Bean" vs "Bin").
-// App.jsx - FIX #3: The transcript is no longer reset per attempt. Each
-//                 attempt now compares the expected word against the LAST
-//                 CHUNK of the accumulated transcript (last N words),
-//                 which preserves the engine's context window.
-// App.jsx - MOVED: the recognized-word chip (.recognized-chip) now renders
-//                 INSIDE the status pill, immediately after the repeat chip
-//                 (.db-info-repeat), instead of next to the Start/Repeat
-//                 button. This makes the pill self-contained during a
-//                 repeat-after-me session.
-// App.jsx - NEW: Minimum listening window (LISTEN_MIN_MS). The mic stays
-//                 open for at least this long after startRepeatListening(),
-//                 even if the engine emits a stale transcript or interim
-//                 results too early. Guarantees the user always has time to
-//                 pronounce the word.
-// App.jsx - FIXED: the recognized-word chip now shows ONLY the words the
-//                 user said AFTER the current attempt's mic opened. It slices
-//                 the transcript at transcriptBaselineRef.current before
-//                 running lastWords()/comparison, so previous attempts'
-//                 words no longer accumulate in the chip.
-// App.jsx - NEW: The "voices loaded" success alert itemizes only the
-//                 Russian (ru-RU) and English (en-GB / en-US / en-AU) voices.
-//                 The Russian group is listed FIRST, then the English group.
-// App.jsx - NEW: On successful voice load, if no voice has been chosen yet,
-//                 a RANDOM English voice (en-GB / en-US / en-AU) is selected
-//                 for "Select Voice", and a RANDOM Russian voice (ru-RU)
-//                 is selected for "Translation Voice".
-// App.jsx - MOVED: All options from Settings / "Card Appearance" now render
-//                 AFTER the "Display Options" section in the Settings modal.
-//                 New section order: Study Settings → Voice Settings →
-//                 Display Options → Card Appearance.
-// App.jsx - CHANGED: The non-studying Start button now shows "🎧 Start"
-//                 instead of "🚀 Start".
-// App.jsx - DEFAULT: "Pronounce translation" now defaults to CHECKED (true).
-// App.jsx - NEW: The DB file name is tracked via a cookie
-//                 (`ecoCards.dbFileName`). It survives page refreshes.
-// App.jsx - FIXED: The status pill now always shows the actual file name
-//                 (without its extension), regardless of any "name" field
-//                 in the lesson JSON.
-// App.jsx - FIXED: The on-mount auto-load no longer compares the cookie
-//                 value against the lessons index. Instead, when the cookie
-//                 is set, the app builds the URL directly as
-//                 `/lessons/<cookie-value>.json` and loads it. The lesson
-//                 picker is only shown when there is no cookie, or when
-//                 the direct fetch fails.
-// App.jsx - NEW: "Hide alerts" checkbox in Settings, placed right after the
-//                 "Display Options" section. Default is CHECKED (true).
-//                 When checked, informational alerts are suppressed via a
-//                 `notify()` helper that becomes a no-op. Session completion
-//                 reports and error conditions are NOT suppressed — they use
-//                 a separate `report()` helper / raw alert() respectively,
-//                 because they carry results or actionable failures.
-// App.jsx - FIXED: Session completion reports are no longer routed through
-//                 `notify()`. They now use `report()`, which always shows
-//                 the modal regardless of the `hideAlerts` setting.
-// App.jsx - NEW: "Invisible Top bar" checkbox in Settings → Display Options,
-//                 placed right after "Load lesson locally". Default is now
-//                 CHECKED. When checked, the root <div class="app"> also
-//                 carries the `invisible-top-bar` class, and App.css makes
-//                 the top bar fully transparent (background and bottom
-//                 border). When unchecked, the top bar uses the default
-//                 `#484348a8` background (or white in light theme).
-// App.jsx - CHANGED: The vertical gap between the top bar and the cards row
-//                 is now a fixed 5 px (TOP_BAR_GAP_PX), independent from the
-//                 other gaps.
-// App.jsx - FIXED (Option A): SVG sanitizer now ALLOWS <image> tags whose
-//                 href is a safe inline data:image/*;base64 URI.
-// App.jsx - CHANGED: A wordless card that carries only a translation is now
-//                 pronounced (translation only) in Navigation mode when
-//                 clicked, and in Auto Study mode when the study flow
-//                 reaches it.
-// App.jsx - CHANGED (Repeat-after-me + translation):
-//   • "Pronounce translation" is respected in repeat-after-me mode.
-//   • On a MATCHED attempt (final one for that word), the translation is
-//     spoken once, then the study advances / the nav-repeat cycle ends.
-//     On a FAULT, nothing is spoken.
-//   • A wordless card with a translation: the mic is skipped, the
-//     translation is spoken once (if enabled), then the study advances /
-//     the nav-repeat cycle ends. If "Pronounce translation" is off, the
-//     card advances silently.
-// App.jsx - NEW: Translation strings are now split by script when spoken.
-// App.jsx - FIXED (repeat-after-me navigation-mode hand-off).
-// App.jsx - FIXED (wordless-card toggle in repeat-after-me navigation).
-// App.jsx - FIXED (single-letter recognition).
-// App.jsx - FIXED (Android Desktop-mode portrait card width).
-// App.jsx - NEW (elongated / repeated single-letter aliases).
-// App.jsx - FIXED (multi-word utterances cut off after the first word).
-// App.jsx - NEW (Option C — JS-measured SVG sizing).
-// App.jsx - FIXED (Option C reruns after SVG insertion).
-// App.jsx - NEW (dynamic SVG ↔ Translation split).
-// App.jsx - NEW (repeated multi-letter word match).
-// App.jsx - NEW (speaking-only status pill).
-// App.jsx - NEW (pill disabled while speaking).
-// App.jsx - NEW (Repeat-After-Me statistics):
-//   • Every attempt (match, fault, silence) is recorded to
-//     POST /api/raf-stats.
-//   • Navigation mode posts immediately; Auto Study buffers and
-//     flushes at session end (before the completion report).
-//   • Settings → "📊 Statistics" button opens a modal that GETs
-//     /api/raf-stats and renders a per-word table.
-//   • Store lives at public/lessons/raf-stats.json on the server.
-// App.jsx - NEW (credit modal):
-//   • "Eco Cards" in the header is now a <button>.
-//   • Clicking it opens a small modal with the credit line:
-//       "Suggestions for improvement: bogatyrev.viktor@gmail.com"
-//   • The footer button is labelled "Ok" (Windows convention).
-// App.jsx - FIXED (credit modal email link):
-//   • The email link no longer shows the browser's anchor underline.
-// App.jsx - CHANGED (Settings → Study Settings order):
-//   • "🎤 Repeat after me" is now the FIRST block in Study Settings.
-//   • "Random pair of cards study" has moved BELOW the Repeat-after-me
-//     block (including its conditional sub-items).
-//   • "Study Time per Card (seconds):" and
-//     "Auto-pronounce words during study" follow after.
-// App.jsx - CHANGED (Settings footer):
-//   • "📂 Open Settings" and "Save Settings" have been MOVED OUT of the
-//     modal footer and now render inside the "Card Appearance" section,
-//     immediately below the "📊 Statistics" button.
-//   • The modal footer now only contains "Ok" and "Cancel".
-// App.jsx - NEW (Hide options below):
-//   • A new checkbox "Hide options below" sits at the bottom of the
-//     Study Settings section (above Voice Settings).
-//   • When ticked, the entire content of Voice Settings, Display Options,
-//     Alerts and Card Appearance is hidden. Ticking it again restores them.
-//   • Persisted like every other setting via saveSettings / loadSettingsFromFile.
-// App.jsx - DEFAULT (Hide options below):
-//   • "Hide options below" now defaults to CHECKED (true), so on first
-//     load only Study Settings and the checkbox itself are visible.
-//     Users can untick it to reveal Voice Settings, Display Options,
-//     Alerts and Card Appearance.
-// App.jsx - REMOVED: "📖 Each card pulses during study" note from
-//                 Study Settings.
+// App.jsx — Eco Cards (speech app) + per-letter Font Color rendering
+// All prior behavior preserved. Only the visual layer of card text changed.
+// ── FONT-COLOR ── : new helpers + ColoredText component; applyDatabasePayload
+//                  now normalizes fontColors on every card.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -399,7 +221,6 @@ const isRepeatedLetterMatch = (expected, chunk) => {
   return false;
 };
 
-// Multi-letter repeated-word detection: "bean bean" / "bean, bean" / "bean bean bean".
 const isRepeatedWordMatch = (expected, chunk) => {
   const ne = normalizeForComparison(expected);
   const nc = normalizeForComparison(chunk);
@@ -503,6 +324,66 @@ const buildVoicesLoadedMessage = (voices) => {
   return lines.join('\n');
 };
 
+/* ── FONT-COLOR ────────────────────────────────────────────────────────────
+   ColoredText renders a plain string with per-letter colored spans.
+
+   `colors` is a map { index → 'green'|'blue'|'red'|'brown' }.
+   Missing indices and out-of-range indices are rendered as plain text
+   (theme default color). An empty map → plain text → identical to
+   the original app's rendering, so old records look exactly the same.
+
+   Using a <span> for both colored and uncolored runs keeps the DOM
+   tree homogeneous and prevents React from reordering children
+   between renders (which would otherwise thrash layout).
+   ─────────────────────────────────────────────────────────────────────── */
+const ColoredText = ({ text, colors }) => {
+  if (!text) return null;
+  if (!colors || Object.keys(colors).length === 0) return <>{text}</>;
+
+  const nodes = [];
+  let buffer = '';
+  let bufferColor = colors[0] || null;
+
+  for (let i = 0; i < text.length; i++) {
+    const color = colors[i] || null;
+    if (color === bufferColor) {
+      buffer += text[i];
+    } else {
+      if (buffer) {
+        nodes.push(
+          bufferColor
+            ? <span key={`c-${i}`} className={`fc-${bufferColor}`}>{buffer}</span>
+            : <span key={`p-${i}`}>{buffer}</span>
+        );
+      }
+      buffer = text[i];
+      bufferColor = color;
+    }
+  }
+  if (buffer) {
+    nodes.push(
+      bufferColor
+        ? <span key="last-c" className={`fc-${bufferColor}`}>{buffer}</span>
+        : <span key="last-p">{buffer}</span>
+    );
+  }
+  return <>{nodes}</>;
+};
+
+// ── FONT-COLOR ──
+// Normalize a card's per-field fontColors map, accepting legacy field names.
+const normalizeFontColors = (card) => {
+  if (!card) return { word: {}, transcription: {}, translation: {} };
+  const lc = card.letterColors || {};
+  const hl = card.highlights || {};
+  const fc = card.fontColors || {};
+  return {
+    word:          fc.word          || lc.word          || hl.word          || {},
+    transcription: fc.transcription || lc.transcription || hl.transcription || {},
+    translation:   fc.translation   || lc.translation   || hl.translation   || {},
+  };
+};
+
 const App = () => {
   const [dbLoaded, setDbLoaded] = useState(false);
   const [dbFileName, setDbFileName] = useState(() => {
@@ -538,13 +419,11 @@ const App = () => {
 
   const [initialLoadResolved, setInitialLoadResolved] = useState(false);
 
-  // Statistics modal
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [statsData, setStatsData] = useState(null);
   const [statsError, setStatsError] = useState('');
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
-  // Credit (about) modal
   const [isCreditOpen, setIsCreditOpen] = useState(false);
 
   const displayInfo = useDisplayInfo();
@@ -637,7 +516,6 @@ const App = () => {
 
   const topBarRef = useRef(null);
 
-  // Option C: refs for JS measurement of per-card heights.
   const singularContentRef = useRef(null);
   const pluralContentRef = useRef(null);
   const singularTranscriptionRef = useRef(null);
@@ -1390,8 +1268,6 @@ const App = () => {
     clearManualPulse();
 
     if (showCompletionAlert && !completionAlertShownRef.current) {
-      // Auto-mode flush: push the buffered attempt log to the server
-      // before the completion report appears.
       if (settingsRef.current.repeatAfterMe && !navRepeatActiveRef.current) {
         flushAutoBuffer();
       }
@@ -2065,6 +1941,21 @@ const App = () => {
     }
   };
 
+  // ── FONT-COLOR ──
+  // Convert one incoming raw card into { word, transcription, translation,
+  // svgCode, fontColors } shape, accepting all legacy formats.
+  const normalizeCard = (rawCard) => {
+    const c = rawCard || {};
+    const fontColors = normalizeFontColors(c);
+    return {
+      word: c.word || "",
+      transcription: c.transcription || "",
+      translation: c.translation || "",
+      svgCode: c.svgCode || "",
+      fontColors,
+    };
+  };
+
   const applyDatabasePayload = useCallback((importedData, sourceName) => {
     let records = [];
     if (importedData.records && Array.isArray(importedData.records)) records = importedData.records;
@@ -2076,51 +1967,22 @@ const App = () => {
       if (record.card1 && record.card2) {
         return {
           id: record.id || idx + 1,
-          singular: {
-            word: record.card1.word || "",
-            transcription: record.card1.transcription || "",
-            translation: record.card1.translation || "",
-            svgCode: record.card1.svgCode || ""
-          },
-          plural: {
-            word: record.card2.word || "",
-            transcription: record.card2.transcription || "",
-            translation: record.card2.translation || "",
-            svgCode: record.card2.svgCode || ""
-          }
+          singular: normalizeCard(record.card1),
+          plural: normalizeCard(record.card2),
         };
       }
       if (record.singular && record.plural) {
         return {
           id: record.id || idx + 1,
-          singular: {
-            word: record.singular.word || "",
-            transcription: record.singular.transcription || "",
-            translation: record.singular.translation || "",
-            svgCode: record.singular.svgCode || ""
-          },
-          plural: {
-            word: record.plural.word || "",
-            transcription: record.plural.transcription || "",
-            translation: record.plural.translation || "",
-            svgCode: record.plural.svgCode || ""
-          }
+          singular: normalizeCard(record.singular),
+          plural: normalizeCard(record.plural),
         };
       }
+      const single = normalizeCard(record);
       return {
         id: record.id || idx + 1,
-        singular: {
-          word: record.word || "",
-          transcription: record.transcription || "",
-          translation: record.translation || "",
-          svgCode: record.svgCode || ""
-        },
-        plural: {
-          word: record.word || "",
-          transcription: record.transcription || "",
-          translation: record.translation || "",
-          svgCode: record.svgCode || ""
-        }
+        singular: { ...single },
+        plural: { ...single },
       };
     });
     setAllRecords(convertedRecords);
@@ -2445,7 +2307,6 @@ const App = () => {
 
   const svgWrapperClass = settings.showSvgBorder ? 'svg-wrapper svg-bordered' : 'svg-wrapper';
 
-  // Option C (fixed): insert the SVG, then measure and assign explicit heights.
   const singularSvgCode = currentRecord?.singular?.svgCode || '';
   const pluralSvgCode = currentRecord?.plural?.svgCode || '';
 
@@ -2567,13 +2428,15 @@ const App = () => {
     (settings.repeatAfterMe && isStudying) ||
     (settings.repeatAfterMe && navRepeatActive);
 
-  // Navigation-mode card pronunciation, no live repeat chip:
-  // collapse the pill to just the 🔊 speaking indicator.
   const pillSpeakingOnly =
     isSpeaking &&
     !isStudying &&
     !navRepeatActive &&
     !showRepeatChip;
+
+  // ── FONT-COLOR ── : per-card color maps resolved once per render
+  const singularFontColors = currentRecord?.singular?.fontColors || {};
+  const pluralFontColors   = currentRecord?.plural?.fontColors   || {};
 
   return (
     <div
@@ -2802,16 +2665,34 @@ const App = () => {
             }
             aria-disabled={isStudying}
           >
+            {/* ── FONT-COLOR ── word now rendered through ColoredText */}
             <div className="english-word">
-              {dbLoaded && currentRecord?.singular?.word ? currentRecord.singular.word : ""}
+              {dbLoaded && currentRecord?.singular?.word ? (
+                <ColoredText
+                  text={currentRecord.singular.word}
+                  colors={singularFontColors.word}
+                />
+              ) : null}
             </div>
             <div className="card-content" ref={singularContentRef}>
+              {/* ── FONT-COLOR ── transcription */}
               <div className="transcription" ref={singularTranscriptionRef}>
-                {dbLoaded && currentRecord?.singular?.transcription ? currentRecord.singular.transcription : ""}
+                {dbLoaded && currentRecord?.singular?.transcription ? (
+                  <ColoredText
+                    text={currentRecord.singular.transcription}
+                    colors={singularFontColors.transcription}
+                  />
+                ) : null}
               </div>
               <div className={svgWrapperClass} ref={singularSvgRef} aria-hidden="true"></div>
+              {/* ── FONT-COLOR ── translation */}
               <div className="translation" ref={singularTranslationRef}>
-                {dbLoaded && currentRecord?.singular?.translation ? currentRecord.singular.translation : ""}
+                {dbLoaded && currentRecord?.singular?.translation ? (
+                  <ColoredText
+                    text={currentRecord.singular.translation}
+                    colors={singularFontColors.translation}
+                  />
+                ) : null}
               </div>
             </div>
           </div>
@@ -2830,16 +2711,34 @@ const App = () => {
             }
             aria-disabled={isStudying}
           >
+            {/* ── FONT-COLOR ── word */}
             <div className="english-word">
-              {dbLoaded && currentRecord?.plural?.word ? currentRecord.plural.word : ""}
+              {dbLoaded && currentRecord?.plural?.word ? (
+                <ColoredText
+                  text={currentRecord.plural.word}
+                  colors={pluralFontColors.word}
+                />
+              ) : null}
             </div>
             <div className="card-content" ref={pluralContentRef}>
+              {/* ── FONT-COLOR ── transcription */}
               <div className="transcription" ref={pluralTranscriptionRef}>
-                {dbLoaded && currentRecord?.plural?.transcription ? currentRecord.plural.transcription : ""}
+                {dbLoaded && currentRecord?.plural?.transcription ? (
+                  <ColoredText
+                    text={currentRecord.plural.transcription}
+                    colors={pluralFontColors.transcription}
+                  />
+                ) : null}
               </div>
               <div className={svgWrapperClass} ref={pluralSvgRef} aria-hidden="true"></div>
+              {/* ── FONT-COLOR ── translation */}
               <div className="translation" ref={pluralTranslationRef}>
-                {dbLoaded && currentRecord?.plural?.translation ? currentRecord.plural.translation : ""}
+                {dbLoaded && currentRecord?.plural?.translation ? (
+                  <ColoredText
+                    text={currentRecord.plural.translation}
+                    colors={pluralFontColors.translation}
+                  />
+                ) : null}
               </div>
             </div>
           </div>

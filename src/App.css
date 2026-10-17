@@ -1337,3 +1337,17 @@ body.light .header-title-button {
   padding-top: 1.2rem;
   padding-bottom: 1.2rem;
 }
+
+/* ============================================================
+   FONT COLOR — per-letter spans emitted by <ColoredText>
+   ============================================================ */
+.fc-green { color: #4caf50; }
+.fc-blue  { color: #42a5f5; }
+.fc-red   { color: #f44336; }
+.fc-brown { color: #a1887f; }
+
+/* Light-theme overrides — the dark-mode pastels are too pale on white */
+body.light .fc-green { color: #2e7d32; }
+body.light .fc-blue  { color: #1565c0; }
+body.light .fc-red   { color: #c62828; }
+body.light .fc-brown { color: #5d4037; }
