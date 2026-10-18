@@ -32,7 +32,7 @@
         }
       },
       "createdAt": "2026-10-08T18:29:53.297Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 2,
@@ -66,7 +66,7 @@
         }
       },
       "createdAt": "2026-10-08T18:29:53.297Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 3,
@@ -100,7 +100,7 @@
         }
       },
       "createdAt": "2026-10-08T18:56:43.786Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 4,
@@ -131,7 +131,7 @@
         }
       },
       "createdAt": "2026-10-08T18:56:43.786Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 5,
@@ -164,7 +164,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 6,
@@ -199,7 +199,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 7,
@@ -232,7 +232,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 8,
@@ -263,7 +263,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 9,
@@ -296,7 +296,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 10,
@@ -330,14 +330,14 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 11,
       "card1": {
         "word": "",
         "transcription": "/ ɔ /",
-        "translation": "o в следующем слове произноситься как краткий глубокий звук \"о\" или более открытый звук близкий \"а\"",
+        "translation": "o в следующем слове произноситься как краткий глубокий звук \"о\"",
         "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-22 96)\" fill=\"#199b77\" font-family=\"ArialMT, Arial\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\" font-size=\"106\"> </tspan><tspan x=\"29.5\" y=\"0\" font-size=\"132\">ɔ</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(61 37)\" fill=\"#3f74ba\" font-family=\"ArialMT, Arial\" font-size=\"65\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">o</tspan></text>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
@@ -363,7 +363,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 12,
@@ -398,14 +398,14 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 13,
       "card1": {
         "word": "",
         "transcription": "/ ʌ /",
-        "translation": "o в следующем слове произносится как краткий гласный звук близкий \"а\" или безударному \"о\"",
+        "translation": "o в следующем слове произносится как краткий гласный звук \"а\"",
         "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-18.4 97.4)\" fill=\"#199b77\" font-family=\"ArialMT, Arial\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\" font-size=\"106\"> </tspan><tspan x=\"29.5\" y=\"0\" font-size=\"114\">ʌ</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(56.1 42.9)\" fill=\"#3f74ba\" font-family=\"ArialMT, Arial\" font-size=\"74\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">а</tspan></text>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
@@ -431,7 +431,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 14,
@@ -466,7 +466,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 15,
@@ -500,14 +500,14 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 16,
       "card1": {
         "word": "",
         "transcription": "/ ʌ /",
-        "translation": "u в следующем слове произносится как краткий гласный звук близкий \"а\" или безударному \"о\".",
+        "translation": "u в следующем слове произносится как краткий гласный звук \"а\"",
         "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-18.4 97.4)\" fill=\"#199b77\" font-family=\"ArialMT, Arial\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\" font-size=\"106\"> </tspan><tspan x=\"29.5\" y=\"0\" font-size=\"114\">ʌ</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(56.1 42.9)\" fill=\"#3f74ba\" font-family=\"ArialMT, Arial\" font-size=\"74\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">а</tspan></text>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
@@ -533,7 +533,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 17,
@@ -568,7 +568,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 18,
@@ -601,7 +601,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     },
     {
       "id": 19,
@@ -636,9 +636,9 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T19:45:08.322Z"
+      "updatedAt": "2026-10-18T20:53:55.562Z"
     }
   ],
-  "exportDate": "2026-10-18T20:24:22.913Z",
+  "exportDate": "2026-10-18T21:01:12.141Z",
   "version": "1.0"
 }
