@@ -276,7 +276,7 @@
       "card1": {
         "word": "",
         "transcription": "/ ɔ /",
-        "translation": "o в следующем слове произноситься как краткий глубокий звук о или более открытый звук близкий а",
+        "translation": "o в следующем слове произноситься как краткий глубокий звук \"о\" или более открытый звук близкий \"а\"",
         "svgCode": "<svg width=\"180\" height=\"120\" viewBox=\"0 0 180 120\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect width=\"180\" height=\"120\" fill=\"#eef3ff\" rx=\"12\" />\n  <circle cx=\"90\" cy=\"55\" r=\"22\" fill=\"#a0c4ff\" />\n  <text x=\"90\" y=\"90\" text-anchor=\"middle\" fill=\"#1f4a7c\" font-size=\"10\">SVG Graphic</text>\n</svg>",
         "letterColors": {
           "word": {},
@@ -330,7 +330,7 @@
       "card1": {
         "word": "",
         "transcription": "/ ʌ /",
-        "translation": "o в следующем слове произносится как краткий гласный звук близкий а или безударному о",
+        "translation": "o в следующем слове произносится как краткий гласный звук близкий \"а\" или безударному \"о\"",
         "svgCode": "<svg width=\"180\" height=\"120\" viewBox=\"0 0 180 120\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect width=\"180\" height=\"120\" fill=\"#eef3ff\" rx=\"12\" />\n  <circle cx=\"90\" cy=\"55\" r=\"22\" fill=\"#a0c4ff\" />\n  <text x=\"90\" y=\"90\" text-anchor=\"middle\" fill=\"#1f4a7c\" font-size=\"10\">SVG Graphic</text>\n</svg>",
         "letterColors": {
           "word": {},
@@ -411,7 +411,7 @@
       "card1": {
         "word": "",
         "transcription": "/ ʌ /",
-        "translation": "u в следующем слове произносится как краткий гласный звук близкий а или безударному о.",
+        "translation": "u в следующем слове произносится как краткий гласный звук близкий \"а\" или безударному \"о\".",
         "svgCode": "<svg width=\"180\" height=\"120\" viewBox=\"0 0 180 120\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect width=\"180\" height=\"120\" fill=\"#eef3ff\" rx=\"12\" />\n  <circle cx=\"90\" cy=\"55\" r=\"22\" fill=\"#a0c4ff\" />\n  <text x=\"90\" y=\"90\" text-anchor=\"middle\" fill=\"#1f4a7c\" font-size=\"10\">SVG Graphic</text>\n</svg>",
         "letterColors": {
           "word": {},
@@ -515,6 +515,6 @@
       "updatedAt": "2026-10-18T12:44:02.752Z"
     }
   ],
-  "exportDate": "2026-10-18T13:28:36.838Z",
+  "exportDate": "2026-10-18T13:49:08.513Z",
   "version": "1.0"
 }
