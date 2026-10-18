@@ -1,7 +1,16 @@
 // App.jsx — Eco Cards (speech app) + per-letter Font Color rendering
-// All prior behavior preserved. Only the visual layer of card text changed.
-// ── FONT-COLOR ── : new helpers + ColoredText component; applyDatabasePayload
-//                  now normalizes fontColors on every card.
+// All prior behavior preserved.
+//
+// SVG FIXES APPLIED (v6 — final):
+//  A. sanitizeSvgString: strip ALL `<?xml …?>` prologs, extract only the
+//     first complete <svg>…</svg> block. Robust parsererror detection.
+//  B. renderSvgToContainer: render temp SVG at 1:1 scale (width=vw,
+//     height=vh, preserveAspectRatio="none"), then use
+//     getBoundingClientRect() to measure actual painted ink. This gives
+//     the true viewBox-unit bounds of every visible element, including
+//     strokes and glyph overhangs/descenders. No letterboxing offset,
+//     no clipped bottoms.
+//  C. sizeOne(): MIN_SVG_H floor raised 40 → 60.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -326,15 +335,6 @@ const buildVoicesLoadedMessage = (voices) => {
 
 /* ── FONT-COLOR ────────────────────────────────────────────────────────────
    ColoredText renders a plain string with per-letter colored spans.
-
-   `colors` is a map { index → 'green'|'blue'|'red'|'brown' }.
-   Missing indices and out-of-range indices are rendered as plain text
-   (theme default color). An empty map → plain text → identical to
-   the original app's rendering, so old records look exactly the same.
-
-   Using a <span> for both colored and uncolored runs keeps the DOM
-   tree homogeneous and prevents React from reordering children
-   between renders (which would otherwise thrash layout).
    ─────────────────────────────────────────────────────────────────────── */
 const ColoredText = ({ text, colors }) => {
   if (!text) return null;
@@ -371,7 +371,6 @@ const ColoredText = ({ text, colors }) => {
 };
 
 // ── FONT-COLOR ──
-// Normalize a card's per-field fontColors map, accepting legacy field names.
 const normalizeFontColors = (card) => {
   if (!card) return { word: {}, transcription: {}, translation: {} };
   const lc = card.letterColors || {};
@@ -1831,11 +1830,36 @@ const App = () => {
     typeof value === 'string' && SAFE_DATA_IMAGE_RE.test(value.trim());
 
   const sanitizeSvgString = (rawSvg) => {
+    let cleaned = String(rawSvg || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/<\?xml[\s\S]*?\?>/gi, '')
+      .trim();
+
+    const firstSvgMatch = cleaned.match(/<svg\b[\s\S]*?<\/svg\s*>/i);
+    if (firstSvgMatch) {
+      cleaned = firstSvgMatch[0];
+    } else if (!/^<svg\b/i.test(cleaned)) {
+      console.warn('[svg] no <svg> element found');
+      return null;
+    }
+
     const parser = new DOMParser();
-    const doc = parser.parseFromString(rawSvg, 'image/svg+xml');
-    if (doc.querySelector('parsererror')) return null;
+    const doc = parser.parseFromString(cleaned, 'image/svg+xml');
+
+    const parseErr =
+      doc.getElementsByTagName('parsererror')[0] ||
+      Array.from(doc.getElementsByTagName('*'))
+        .find(el => /parsererror/i.test(el.tagName));
+    if (parseErr) {
+      console.warn('[svg] parse error:', parseErr.textContent.slice(0, 300));
+      return null;
+    }
+
     const svgEl = doc.documentElement;
-    if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') return null;
+    if (!svgEl || svgEl.localName !== 'svg') {
+      console.warn('[svg] root element is not <svg>:', svgEl?.localName);
+      return null;
+    }
 
     DANGEROUS_SVG_TAGS.forEach((tag) =>
       doc.querySelectorAll(tag).forEach((el) => el.remove())
@@ -1906,6 +1930,18 @@ const App = () => {
       );
     });
 
+    svgEl.removeAttribute('baseProfile');
+    if (svgEl.getAttribute('version') === '1.2') {
+      svgEl.setAttribute('version', '1.1');
+    }
+
+    doc.querySelectorAll('text').forEach((t) => {
+      const ff = t.getAttribute('font-family') || '';
+      if (ff && !/(sans-serif|serif|monospace|system-ui)/i.test(ff)) {
+        t.setAttribute('font-family', `${ff}, sans-serif`);
+      }
+    });
+
     return svgEl;
   };
 
@@ -1917,15 +1953,145 @@ const App = () => {
       .map(token => (CLASS_TOKEN_REGEX.test(token) ? `${scopeId}-${token}` : token))
       .join(' ');
 
+  // ── FIX B (v6): 1:1 rendering + getBoundingClientRect ──
+  //
+  // getBBox() returns the font em-box for <text>, not the painted ink
+  // → descenders and overhangs get clipped.
+  //
+  // The previous getBoundingClientRect() attempt letterboxed the temp
+  // SVG (its rendered size didn't match the viewBox aspect ratio), so
+  // screen-pixel offsets were not true viewBox offsets.
+  //
+  // Fix: render temp SVG at EXACTLY its viewBox width/height with
+  // preserveAspectRatio="none". Then (r.left - svgRect.left) is a
+  // direct viewBox-coordinate offset — no scaling, no letterbox. This
+  // measures true painted ink, including strokes and glyph overhangs.
   const renderSvgToContainer = (container, svgCode, uniqueId) => {
     if (!container) return;
     container.replaceChildren();
     if (!svgCode || svgCode.trim() === '') return;
+
+    const measure = document.createElement('div');
+    measure.style.cssText =
+      'position:absolute;left:-99999px;top:-99999px;' +
+      'visibility:hidden;pointer-events:none;';
+    document.body.appendChild(measure);
+
     try {
       const sanitizedSvg = sanitizeSvgString(svgCode);
       if (!sanitizedSvg) return;
+
+      // Determine the SVG's viewBox. If none is declared, fall back to
+      // width/height attributes, and if those are missing, use a
+      // stable default coordinate frame.
+      const vbAttr = sanitizedSvg.getAttribute('viewBox');
+      let vb = null;
+      if (vbAttr) {
+        const parts = vbAttr.trim().split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts.every(Number.isFinite) && parts[2] > 0 && parts[3] > 0) {
+          vb = parts;
+        }
+      }
+      if (!vb) {
+        const wAttr = parseFloat(sanitizedSvg.getAttribute('width')) || 0;
+        const hAttr = parseFloat(sanitizedSvg.getAttribute('height')) || 0;
+        if (wAttr > 0 && hAttr > 0) {
+          vb = [0, 0, wAttr, hAttr];
+        } else {
+          sanitizedSvg.setAttribute('width', '100%');
+          sanitizedSvg.setAttribute('height', '100%');
+          sanitizedSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+          if (!vbAttr) sanitizedSvg.setAttribute('viewBox', '0 0 1000 1000');
+          container.appendChild(sanitizedSvg);
+          return;
+        }
+      }
+
+      const [vx, vy, vw, vh] = vb;
+
+      // Render a clone at 1:1 scale (1 viewBox unit = 1 CSS pixel).
+      const tempSvg = sanitizedSvg.cloneNode(true);
+      tempSvg.setAttribute('width', String(vw));
+      tempSvg.setAttribute('height', String(vh));
+      tempSvg.setAttribute('viewBox', `${vx} ${vy} ${vw} ${vh}`);
+      tempSvg.setAttribute('preserveAspectRatio', 'none');
+      tempSvg.style.display = 'block';
+      tempSvg.style.position = 'absolute';
+      tempSvg.style.left = '0';
+      tempSvg.style.top = '0';
+      tempSvg.style.overflow = 'visible';
+      measure.appendChild(tempSvg);
+
+      // Force layout so getBoundingClientRect works immediately.
+      // eslint-disable-next-line no-unused-expressions
+      tempSvg.getBoundingClientRect();
+
+      const svgRect = tempSvg.getBoundingClientRect();
+
+      if (!svgRect || svgRect.width <= 0 || svgRect.height <= 0) {
+        measure.removeChild(tempSvg);
+        sanitizedSvg.setAttribute('width', '100%');
+        sanitizedSvg.setAttribute('height', '100%');
+        sanitizedSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        container.appendChild(sanitizedSvg);
+        return;
+      }
+
+      // With width==vw and height==vh, 1 client px == 1 viewBox unit.
+      const pxPerUnitX = svgRect.width / vw;
+      const pxPerUnitY = svgRect.height / vh;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let found = false;
+
+      const gfxSelector =
+        'path, rect, circle, ellipse, line, polyline, polygon, text, image, use';
+
+      tempSvg.querySelectorAll(gfxSelector).forEach((el) => {
+        if (el.getAttribute('display') === 'none') return;
+        if (el.getAttribute('visibility') === 'hidden') return;
+        try {
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') return;
+          if (parseFloat(cs.opacity) === 0) return;
+        } catch (_) { /* ignore */ }
+
+        let r;
+        try {
+          r = el.getBoundingClientRect();
+        } catch (_) {
+          return;
+        }
+        if (!r || (r.width === 0 && r.height === 0)) return;
+
+        found = true;
+        const x1 = vx + (r.left - svgRect.left) / pxPerUnitX;
+        const y1 = vy + (r.top  - svgRect.top)  / pxPerUnitY;
+        const x2 = vx + (r.right  - svgRect.left) / pxPerUnitX;
+        const y2 = vy + (r.bottom - svgRect.top)  / pxPerUnitY;
+
+        minX = Math.min(minX, x1);
+        minY = Math.min(minY, y1);
+        maxX = Math.max(maxX, x2);
+        maxY = Math.max(maxY, y2);
+      });
+
+      measure.removeChild(tempSvg);
+
+      if (found && isFinite(minX) && isFinite(maxX) && maxX > minX && maxY > minY) {
+        // Tiny pad so anti-aliased edges aren't clipped.
+        const padX = (maxX - minX) * 0.005;
+        const padY = (maxY - minY) * 0.005;
+        const newVb =
+          `${minX - padX} ${minY - padY} ` +
+          `${maxX - minX + padX * 2} ${maxY - minY + padY * 2}`;
+        sanitizedSvg.setAttribute('viewBox', newVb);
+      }
+
       sanitizedSvg.setAttribute('width', '100%');
       sanitizedSvg.setAttribute('height', '100%');
+      sanitizedSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
       const scopeId = uniqueId || `svg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       sanitizedSvg.querySelectorAll('style').forEach((style) => {
         style.textContent = rewriteStyleContent(style.textContent || '', scopeId);
@@ -1934,16 +2100,16 @@ const App = () => {
         const oldClass = el.getAttribute('class');
         if (oldClass) el.setAttribute('class', rewriteClassAttribute(oldClass, scopeId));
       });
+
       container.appendChild(sanitizedSvg);
     } catch (error) {
       console.error('Error rendering SVG:', error);
       container.replaceChildren();
+    } finally {
+      measure.remove();
     }
   };
 
-  // ── FONT-COLOR ──
-  // Convert one incoming raw card into { word, transcription, translation,
-  // svgCode, fontColors } shape, accepting all legacy formats.
   const normalizeCard = (rawCard) => {
     const c = rawCard || {};
     const fontColors = normalizeFontColors(c);
@@ -2320,7 +2486,7 @@ const App = () => {
     renderSvgToContainer(singularSvgRef.current, singularSvgCode, 'singular');
     renderSvgToContainer(pluralSvgRef.current, pluralSvgCode, 'plural');
 
-    const MIN_SVG_H = 40;
+    const MIN_SVG_H = 60;
     const CONTENT_GAP = 8;
 
     const sizeOne = (contentEl, transcriptionEl, translationEl, svgWrapperEl) => {
@@ -2434,7 +2600,6 @@ const App = () => {
     !navRepeatActive &&
     !showRepeatChip;
 
-  // ── FONT-COLOR ── : per-card color maps resolved once per render
   const singularFontColors = currentRecord?.singular?.fontColors || {};
   const pluralFontColors   = currentRecord?.plural?.fontColors   || {};
 
@@ -2665,7 +2830,6 @@ const App = () => {
             }
             aria-disabled={isStudying}
           >
-            {/* ── FONT-COLOR ── word now rendered through ColoredText */}
             <div className="english-word">
               {dbLoaded && currentRecord?.singular?.word ? (
                 <ColoredText
@@ -2675,7 +2839,6 @@ const App = () => {
               ) : null}
             </div>
             <div className="card-content" ref={singularContentRef}>
-              {/* ── FONT-COLOR ── transcription */}
               <div className="transcription" ref={singularTranscriptionRef}>
                 {dbLoaded && currentRecord?.singular?.transcription ? (
                   <ColoredText
@@ -2685,7 +2848,6 @@ const App = () => {
                 ) : null}
               </div>
               <div className={svgWrapperClass} ref={singularSvgRef} aria-hidden="true"></div>
-              {/* ── FONT-COLOR ── translation */}
               <div className="translation" ref={singularTranslationRef}>
                 {dbLoaded && currentRecord?.singular?.translation ? (
                   <ColoredText
@@ -2711,7 +2873,6 @@ const App = () => {
             }
             aria-disabled={isStudying}
           >
-            {/* ── FONT-COLOR ── word */}
             <div className="english-word">
               {dbLoaded && currentRecord?.plural?.word ? (
                 <ColoredText
@@ -2721,7 +2882,6 @@ const App = () => {
               ) : null}
             </div>
             <div className="card-content" ref={pluralContentRef}>
-              {/* ── FONT-COLOR ── transcription */}
               <div className="transcription" ref={pluralTranscriptionRef}>
                 {dbLoaded && currentRecord?.plural?.transcription ? (
                   <ColoredText
@@ -2731,7 +2891,6 @@ const App = () => {
                 ) : null}
               </div>
               <div className={svgWrapperClass} ref={pluralSvgRef} aria-hidden="true"></div>
-              {/* ── FONT-COLOR ── translation */}
               <div className="translation" ref={pluralTranslationRef}>
                 {dbLoaded && currentRecord?.plural?.translation ? (
                   <ColoredText

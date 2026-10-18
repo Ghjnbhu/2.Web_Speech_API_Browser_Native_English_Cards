@@ -7,7 +7,7 @@
         "word": "",
         "transcription": "/ æ /",
         "translation": "a в следующем слове произносится как \"э\" широкое среднее между \"э\" и \"а\"",
-        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(.64 98.23) scale(1.13 1)\" fill=\"#3d4fa2\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"110.55\"><tspan x=\"0\" y=\"0\">æ</tspan></text>\n  <text transform=\"translate(3.72 39.91) scale(.91 1)\" fill=\"#e8194e\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"71.55\"><tspan x=\"0\" y=\"0\">а </tspan></text>\n  <text transform=\"translate(27.07 39.91) scale(.91 1)\" fill=\"#ae509e\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"71.55\"><tspan x=\"0\" y=\"0\">э...</tspan></text>\n</svg><?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(30.1 97.8)\" fill=\"#199b77\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"106\"><tspan x=\"0\" y=\"0\">i </tspan></text>\n  <text transform=\"translate(54.8 25.8)\" fill=\"#3f74ba\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"49\"><tspan x=\"0\" y=\"0\">и</tspan></text>\n</svg>",
+        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-3.1 98.3) scale(1.1 1)\" fill=\"#3d4fa2\" font-family=\"ArialMT, Arial\" font-size=\"102\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">æ</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-.2 40.2) scale(.8 1)\" fill=\"#e8194e\" font-family=\"ArialMT, Arial\" font-size=\"71.3\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">а</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(24.5 39.2) scale(.8 1)\" fill=\"#ae509e\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\" font-family=\"TimesNewRomanPSMT, &apos;Times New Roman&apos;\" font-size=\"80\">э</tspan><tspan x=\"34.3\" y=\"0\" font-family=\"ArialMT, Arial\" font-size=\"71.3\">...</tspan></text>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
           "transcription": {},
@@ -32,7 +32,7 @@
         }
       },
       "createdAt": "2026-10-08T18:29:53.297Z",
-      "updatedAt": "2026-10-18T12:44:02.751Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 2,
@@ -66,7 +66,7 @@
         }
       },
       "createdAt": "2026-10-08T18:29:53.297Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 3,
@@ -100,7 +100,7 @@
         }
       },
       "createdAt": "2026-10-08T18:56:43.786Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 4,
@@ -131,7 +131,7 @@
         }
       },
       "createdAt": "2026-10-08T18:56:43.786Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 5,
@@ -139,7 +139,7 @@
         "word": "",
         "transcription": "/ e /",
         "translation": "e в следующем слове произносится как обычный краткий гласный звук э",
-        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(6.8 97.3)\" fill=\"#4d4fa1\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"131\"><tspan x=\"0\" y=\"0\">e</tspan></text>\n  <text transform=\"translate(61.6 37.3)\" fill=\"#c3499b\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"72\"><tspan x=\"0\" y=\"0\">э</tspan></text>\n</svg>",
+        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <g isolation=\"isolate\">\n      <path d=\"M61.9,75.4l11.9,1.5c-1.9,7-5.4,12.3-10.4,16.2-5.1,3.8-11.6,5.8-19.4,5.8s-17.8-3.1-23.6-9.2c-5.8-6.1-8.7-14.7-8.7-25.7s2.9-20.3,8.8-26.6c5.9-6.3,13.5-9.5,22.9-9.5s16.5,3.1,22.3,9.3c5.8,6.2,8.6,14.9,8.6,26.1s0,1.7,0,3.1H23.5c.4,7.5,2.5,13.2,6.3,17.1,3.8,4,8.5,5.9,14.2,5.9s7.8-1.1,10.8-3.3c3-2.2,5.4-5.8,7.1-10.6ZM24.1,56.8h37.9c-.5-5.7-2-10-4.3-12.9-3.7-4.4-8.4-6.7-14.3-6.7s-9.7,1.8-13.3,5.3c-3.6,3.5-5.6,8.3-6,14.2Z\" fill=\"#4d4fa1\"/>\n    </g>\n  </g>\n  <g isolation=\"isolate\">\n    <g isolation=\"isolate\">\n      <path d=\"M90.8,17.9c-.4-3.1-1.4-5.6-3.1-7.5-1.7-1.9-3.8-2.9-6.4-2.9-4.6,0-7.3,2.4-8.3,7.1l-5.7-.9c.5-3.2,2-5.9,4.4-8,2.4-2.1,5.5-3.1,9.4-3.1s8.7,1.6,11.5,4.8c2.8,3.2,4.2,7.7,4.2,13.3.1,5.6-1.2,10-3.9,13.5s-6.5,5-11.5,4.7c-4.1,0-7.5-1.2-10.1-3.5-2.6-2.3-4.1-5.4-4.8-9.2l5.8-.8c.9,5.8,3.8,8.6,8.8,8.6s5-.9,6.6-2.8c1.6-1.9,2.6-4.7,2.9-8.5h-12.3v-4.8h12.3Z\" fill=\"#c3499b\"/>\n    </g>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
           "transcription": {},
@@ -164,7 +164,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 6,
@@ -172,7 +172,7 @@
         "word": "",
         "transcription": "/ i: /",
         "translation": "e в следующем слове произносится как долгий звук и",
-        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(28.1 97.5)\" fill=\"#199b77\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"106\"><tspan x=\"0\" y=\"0\">i: </tspan></text>\n  <text transform=\"translate(0 24)\" fill=\"#3f74ba\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"44\"><tspan x=\"0\" y=\"0\">иии...</tspan></text>\n</svg><svg width=\"180\" height=\"120\" viewBox=\"0 0 180 120\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect width=\"180\" height=\"120\" fill=\"#eef3ff\" rx=\"12\" />\n  <circle cx=\"90\" cy=\"55\" r=\"22\" fill=\"#a0c4ff\" />\n  <text x=\"90\" y=\"90\" text-anchor=\"middle\" fill=\"#1f4a7c\" font-size=\"10\">SVG Graphic</text>\n</svg>",
+        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(28.1 97.5)\" fill=\"#199b77\" font-family=\"ArialMT, Arial\" font-size=\"95\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">i:</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(0 24)\" fill=\"#3f74ba\" font-family=\"ArialMT, Arial\" font-size=\"40\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">иии...</tspan></text>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
           "transcription": {},
@@ -199,7 +199,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 7,
@@ -232,7 +232,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 8,
@@ -240,7 +240,7 @@
         "word": "",
         "transcription": "",
         "translation": "e в следующем слове не произносится",
-        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(1.1 95)\" fill=\"#199b77\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"186\"><tspan x=\"0\" y=\"0\">e</tspan></text>\n  <text/>\n  <rect x=\"-10.8\" y=\"49.3\" width=\"126.3\" height=\"6.2\" transform=\"translate(-21.6 57.2) rotate(-48.7)\" fill=\"#ed1d32\"/>\n  <rect x=\"-14.9\" y=\"47.5\" width=\"126.3\" height=\"6.7\" transform=\"translate(43.1 120.8) rotate(-132.2)\" fill=\"#ed1d32\"/>\n</svg>",
+        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <g isolation=\"isolate\">\n      <path d=\"M73.9,66.1l15.7,1.9c-2.5,9.2-7.1,16.3-13.8,21.4-6.7,5.1-15.3,7.6-25.7,7.6s-23.5-4-31.2-12.1c-7.7-8.1-11.5-19.4-11.5-34s3.9-26.8,11.7-35.1C26.9,7.4,36.9,3.3,49.3,3.3s21.8,4.1,29.4,12.2c7.6,8.2,11.4,19.7,11.4,34.5s0,2.3,0,4.1H23.1c.6,9.9,3.4,17.4,8.4,22.6,5,5.2,11.3,7.9,18.8,7.9s10.3-1.5,14.3-4.4c3.9-2.9,7.1-7.6,9.4-14ZM24,41.5h50.1c-.7-7.5-2.6-13.2-5.7-17-4.8-5.9-11.1-8.8-18.8-8.8s-12.9,2.3-17.6,7c-4.8,4.7-7.4,10.9-7.9,18.8Z\" fill=\"#199b77\"/>\n    </g>\n  </g>\n  <rect x=\"-10.8\" y=\"49.4\" width=\"126.3\" height=\"6.2\" transform=\"translate(-21.6 57.1) rotate(-48.7)\" fill=\"#ed1d32\"/>\n  <rect x=\"45\" y=\"-12.3\" width=\"6.7\" height=\"126.3\" transform=\"translate(-21.7 45.7) rotate(-42.2)\" fill=\"#ed1d32\"/>\n</svg>",
         "letterColors": {
           "word": {},
           "transcription": {},
@@ -263,7 +263,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 9,
@@ -296,7 +296,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 10,
@@ -304,7 +304,7 @@
         "word": "",
         "transcription": "/ iː /",
         "translation": "i в следующем слове произносится как долгий звук \"и\"",
-        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <text transform=\"translate(28.1 97.5)\" fill=\"#199b77\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"106\"><tspan x=\"0\" y=\"0\">i: </tspan></text>\n  <text transform=\"translate(0 24)\" fill=\"#3f74ba\" font-family=\"MyriadPro-Regular, &apos;Myriad Pro&apos;\" font-size=\"44\"><tspan x=\"0\" y=\"0\">иии...</tspan></text>\n</svg><svg width=\"180\" height=\"120\" viewBox=\"0 0 180 120\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect width=\"180\" height=\"120\" fill=\"#eef3ff\" rx=\"12\" />\n  <circle cx=\"90\" cy=\"55\" r=\"22\" fill=\"#a0c4ff\" />\n  <text x=\"90\" y=\"90\" text-anchor=\"middle\" fill=\"#1f4a7c\" font-size=\"10\">SVG Graphic</text>\n</svg>",
+        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(28.1 97.5)\" fill=\"#199b77\" font-family=\"ArialMT, Arial\" font-size=\"95\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">i:</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(0 24)\" fill=\"#3f74ba\" font-family=\"ArialMT, Arial\" font-size=\"40\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">иии...</tspan></text>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
           "transcription": {},
@@ -330,7 +330,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 11,
@@ -363,7 +363,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 12,
@@ -398,7 +398,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 13,
@@ -431,7 +431,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 14,
@@ -466,7 +466,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 15,
@@ -500,7 +500,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 16,
@@ -533,7 +533,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 17,
@@ -568,7 +568,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 18,
@@ -601,7 +601,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     },
     {
       "id": 19,
@@ -636,9 +636,9 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T12:44:02.752Z"
+      "updatedAt": "2026-10-18T19:45:08.322Z"
     }
   ],
-  "exportDate": "2026-10-18T15:04:34.429Z",
+  "exportDate": "2026-10-18T20:24:22.913Z",
   "version": "1.0"
 }
