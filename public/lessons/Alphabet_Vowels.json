@@ -7,7 +7,7 @@
         "word": "",
         "transcription": "/ æ /",
         "translation": "a в следующем слове произносится как \"э\" широкое среднее между \"э\" и \"а\"",
-        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" baseProfile=\"tiny\" version=\"1.2\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-3.1 98.3) scale(1.1 1)\" fill=\"#3d4fa2\" font-family=\"ArialMT, Arial\" font-size=\"102\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">æ</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(-.2 40.2) scale(.8 1)\" fill=\"#e8194e\" font-family=\"ArialMT, Arial\" font-size=\"71.3\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\">а</tspan></text>\n  </g>\n  <g isolation=\"isolate\">\n    <text transform=\"translate(24.5 39.2) scale(.8 1)\" fill=\"#ae509e\" isolation=\"isolate\"><tspan x=\"0\" y=\"0\" font-family=\"TimesNewRomanPSMT, &apos;Times New Roman&apos;\" font-size=\"80\">э</tspan><tspan x=\"34.3\" y=\"0\" font-family=\"ArialMT, Arial\" font-size=\"71.3\">...</tspan></text>\n  </g>\n</svg>",
+        "svgCode": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 100 100\">\n  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->\n  <defs>\n    <style>\n      .st0, .st1 {\n        font-size: 70px;\n      }\n\n      .st0, .st1, .st2, .st3, .st4 {\n        isolation: isolate;\n      }\n\n      .st0, .st1, .st3, .st4 {\n        font-family: ArialMT, Arial;\n      }\n\n      .st0, .st3 {\n        fill: #ae509e;\n      }\n\n      .st1 {\n        fill: #e8194e;\n      }\n\n      .st3 {\n        font-size: 71.3px;\n      }\n\n      .st4 {\n        fill: #3d4fa2;\n        font-size: 102px;\n      }\n    </style>\n  </defs>\n  <g class=\"st2\">\n    <g class=\"st2\">\n      <text class=\"st4\" transform=\"translate(-3.1 98.3) scale(1.1 1)\"><tspan x=\"0\" y=\"0\">æ</tspan></text>\n    </g>\n  </g>\n  <g class=\"st2\">\n    <g class=\"st2\">\n      <text class=\"st1\" transform=\"translate(-.2 40.2) scale(.8 1)\"><tspan x=\"0\" y=\"0\">а</tspan></text>\n    </g>\n  </g>\n  <g class=\"st2\">\n    <g class=\"st2\">\n      <text class=\"st0\" transform=\"translate(24.2 40.2) scale(.8 1)\"><tspan x=\"0\" y=\"0\">э</tspan></text>\n      <text class=\"st3\" transform=\"translate(51.9 39.2) scale(.8 1)\"><tspan x=\"0\" y=\"0\">...</tspan></text>\n    </g>\n  </g>\n</svg>",
         "letterColors": {
           "word": {},
           "transcription": {},
@@ -32,7 +32,7 @@
         }
       },
       "createdAt": "2026-10-08T18:29:53.297Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 2,
@@ -66,7 +66,7 @@
         }
       },
       "createdAt": "2026-10-08T18:29:53.297Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 3,
@@ -100,7 +100,7 @@
         }
       },
       "createdAt": "2026-10-08T18:56:43.786Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 4,
@@ -131,7 +131,7 @@
         }
       },
       "createdAt": "2026-10-08T18:56:43.786Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 5,
@@ -164,7 +164,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 6,
@@ -199,7 +199,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 7,
@@ -232,7 +232,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 8,
@@ -263,7 +263,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 9,
@@ -296,7 +296,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 10,
@@ -330,7 +330,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 11,
@@ -363,7 +363,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 12,
@@ -398,7 +398,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 13,
@@ -431,7 +431,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 14,
@@ -466,7 +466,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 15,
@@ -500,7 +500,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 16,
@@ -533,7 +533,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 17,
@@ -568,7 +568,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 18,
@@ -601,7 +601,7 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     },
     {
       "id": 19,
@@ -636,9 +636,9 @@
         }
       },
       "createdAt": "2026-10-18T12:21:15.850Z",
-      "updatedAt": "2026-10-18T20:53:55.562Z"
+      "updatedAt": "2026-10-20T17:25:36.450Z"
     }
   ],
-  "exportDate": "2026-10-18T21:01:12.141Z",
+  "exportDate": "2026-10-20T17:29:31.442Z",
   "version": "1.0"
 }
