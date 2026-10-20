@@ -2727,12 +2727,6 @@ const App = () => {
               </button>
             )}
 
-            {/* TEMP DEBUG — remove after verification */}
-            <span style={{ color: 'magenta', fontSize: 11, fontFamily: 'monospace' }}>
-              BUILD-CHECK-7
-            </span>
-            {/* END TEMP DEBUG */}
-
             <button
               type="button"
               className={`header-db-info header-db-info-button ${showRepeatChip ? `repeat-mode repeat-${repeatStatus || 'idle'}` : ''}`}
