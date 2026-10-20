@@ -25,11 +25,13 @@
    - NEW (Clickable header title + credit modal):
        The "Eco Cards" title is now a <button> that opens a small modal
        containing:
-         • a centered "Click to share Eco Cards link." line
+         • a centered "Click to share Eco Cards link." button — calls
+           shareEcoCards(): native share on Android, system share panel
+           on Windows when supported, clipboard fallback otherwise
          • a centered "Use browser Chrome or Opera." hint
-         • a QR code image (src/assets/qr.svg) on a white card
-         • the credit line "Suggestions for improvement:
-           bogatyrev.viktor@gmail.com", centered
+         • a clickable QR code image (src/assets/qr.svg) on a white card
+           that triggers the SAME Share action as the hint above
+         • a centered "Suggestions for improvement: <email>" line
        The modal has NO footer and NO "Ok" button. It is closed by
        clicking the dark overlay or the × icon in its header.
        The email link uses text-decoration:none so the browser's anchor
@@ -1378,20 +1380,44 @@ body.light .header-title-button {
   padding-bottom: 1.2rem;
 }
 
-/* ---- Credit modal: "Click to share Eco Cards link." ---- */
+/* ---- Credit modal: "Click to share Eco Cards link." button ----
+   Styled to look identical to the previous <p> text, but is a
+   real <button> so keyboard + screen-reader users get the correct
+   affordance. No background/border, inherits font, full width. */
 .credit-share-hint {
   display: block;
   width: 100%;
   margin: 0 0 0.5rem 0;
   padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
   text-align: center;
   font-size: 0.95rem;
   font-weight: 600;
   color: #ffd54f;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.credit-share-hint:hover {
+  color: #ffe082;
+}
+
+.credit-share-hint:focus-visible {
+  outline: 2px solid #ffd54f;
+  outline-offset: 4px;
+  border-radius: 6px;
 }
 
 body.light .credit-share-hint {
   color: #b26500;
+}
+body.light .credit-share-hint:hover {
+  color: #8a4d00;
+}
+body.light .credit-share-hint:focus-visible {
+  outline-color: #b26500;
 }
 
 /* ---- Credit modal: "Use browser Chrome or Opera." hint ---- */
@@ -1414,12 +1440,47 @@ body.light .credit-browser-hint {
   color: #b26500;
 }
 
-/* ---- Credit modal: QR code block ---- */
+/* ---- Credit modal: clickable QR button ---- */
+/* The QR itself stays a plain <img class="credit-qr">, but it is
+   wrapped in this <button class="credit-qr-link"> so tapping it
+   fires the same share action as the hint above. line-height:0
+   removes the inline-image descender gap; hover lifts it slightly
+   and adds a bigger shadow so it reads as interactive. */
 .credit-qr-block {
   display: flex;
   justify-content: center;
   align-items: center;
   margin-bottom: 1.2rem;
+}
+
+.credit-qr-link {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 0;
+  transition: transform 0.15s ease;
+}
+
+@media (hover: hover) {
+  .credit-qr-link:hover {
+    transform: translateY(-2px);
+  }
+  .credit-qr-link:hover .credit-qr {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.credit-qr-link:focus-visible {
+  outline: 2px solid #4da3ff;
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+body.light .credit-qr-link:hover .credit-qr {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
 }
 
 .credit-qr {

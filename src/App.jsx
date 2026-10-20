@@ -17,15 +17,19 @@
 //          title button no longer renders the extra dot <span>.
 //
 // NEW (credit modal): the credit modal now shows:
-//   • a centered "Use browser Chrome or Opera" hint
-//   • a QR code image (src/assets/qr.svg) on a white card
+//   • a centered "Click to share Eco Cards link." button (triggers
+//     the Share action: native share on Android, system share panel
+//     on Windows when supported, clipboard fallback otherwise)
+//   • a centered "Use browser Chrome or Opera." hint
+//   • a clickable QR code image (src/assets/qr.svg) on a white card
+//     that triggers the SAME Share action as the hint above
 //   • a centered "Suggestions for improvement: <email>" line
 // The modal no longer renders a footer / "Ok" button. It is closed
 // by clicking the dark overlay or the × icon in its header.
 //
 // FIX (platform-consistent status pill icon):
 //   On some Android browsers the pill briefly showed 🎤 during a normal
-//   auto-pronounce study (repeat-after-me OFF). Three defenses:
+//   auto-pronounce study (repeat-after-me OFF). Four defenses:
 //     1. The 🎤 render is gated by `settings.repeatAfterMe && isStudying
 //        && isListeningForRepeat && !showRepeatChip` — the mic can only
 //        appear during a real listening cycle of a real study session.
@@ -38,9 +42,10 @@
 //     4. `loadSettingsFromFile` ignores `repeatAfterMe` and
 //        `repeatOnWordsNotEqual` so an old `.settings` file cannot
 //        silently re-enable repeat mode on the device.
-//   After these defenses the pill shows 🔊 on both Windows and Android
-//   during auto-pronounce study, and 🎤 only when repeat-after-me is
-//   genuinely running a listening cycle.
+//   The "speaking" indicator in the pill uses 🎧 (U+1F3A7) instead of
+//   🔊 because Android's Noto Color Emoji renders the whole speaker
+//   family (🔈 🔉 🔊) in a mic-like silhouette at pill size. 🎧 draws
+//   unambiguously on every platform.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -1668,6 +1673,52 @@ const App = () => {
   };
 
   const closeStats = () => setIsStatsOpen(false);
+
+  // ── Share Eco Cards link ──────────────────────────────────────
+  // Uses the Web Share API where available (Android → native app
+  // picker; Windows Edge/Chrome → system share panel). Falls back
+  // to copying the link to the clipboard when the API is missing,
+  // blocked, or the OS has no share target.
+  const shareEcoCards = async () => {
+    const shareData = {
+      title: 'Eco Cards',
+      text: 'Check out Eco Cards',
+      url: window.location.href,
+    };
+
+    const copyFallback = async () => {
+      try {
+        await navigator.clipboard.writeText(shareData.url);
+        alert('Eco Cards link copied to clipboard.');
+      } catch (_) {
+        // Last-ditch fallback: legacy execCommand route
+        const ta = document.createElement('textarea');
+        ta.value = shareData.url;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (_) { /* noop */ }
+        document.body.removeChild(ta);
+        alert('Eco Cards link copied to clipboard.');
+      }
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;                                       // success — nothing more
+      } catch (err) {
+        if (err && err.name === 'AbortError') return; // user cancelled
+        // NotAllowedError, DataError, etc. → fall through to clipboard
+        await copyFallback();
+        return;
+      }
+    }
+
+    await copyFallback();
+  };
 
   const SETTINGS_SCHEMA = {
     autoAlign: { type: 'boolean', default: true },
@@ -3626,23 +3677,36 @@ const App = () => {
               </button>
             </div>
 
-                        <div className="settings-content">
-              <p className="credit-share-hint">
+            <div className="settings-content">
+              <button
+                type="button"
+                className="credit-share-hint"
+                onClick={shareEcoCards}
+                title="Share Eco Cards link"
+              >
                 Click to share Eco Cards link.
-              </p>
+              </button>
 
               <p className="credit-browser-hint">
-                Use browser Chrome or Opera to open.
+                Use browser Chrome or Opera.
               </p>
 
               <div className="credit-qr-block">
-                <img
-                  className="credit-qr"
-                  src={qrUrl}
-                  alt="QR code for Eco Cards"
-                  width={180}
-                  height={180}
-                />
+                <button
+                  type="button"
+                  className="credit-qr-link"
+                  onClick={shareEcoCards}
+                  aria-label="Share Eco Cards link"
+                  title="Share Eco Cards link"
+                >
+                  <img
+                    className="credit-qr"
+                    src={qrUrl}
+                    alt="QR code for Eco Cards — click to share the link"
+                    width={180}
+                    height={180}
+                  />
+                </button>
               </div>
 
               <p className="credit-text">
