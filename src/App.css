@@ -24,10 +24,47 @@
           when the "Invisible Top bar" checkbox is enabled.
    - NEW (Clickable header title + credit modal):
        The "Eco Cards" title is now a <button> that opens a small modal
-       with the credit line "Suggestions for improvement:
-       bogatyrev.viktor@gmail.com". The email link uses text-decoration:none
-       so the browser's anchor underline does not read as an underscore.
+       containing:
+         • a "Use browser Chrome or Opera" hint (centered)
+         • a QR code image (src/assets/qr.svg)
+         • the credit line "Suggestions for improvement:
+           bogatyrev.viktor@gmail.com"
+       The email link uses text-decoration:none so the browser's anchor
+       underline does not read as an underscore.
        The modal's footer button is labelled "Ok" (Windows convention).
+   - NEW (Standby attention animation on the header title):
+       FIVE variants (glow / breathe / shimmer / heartbeat / rotate)
+       chosen at random on load and re-rolled after every study session
+       ("break"). Gated by the .attention-<variant> modifier classes.
+       All respect prefers-reduced-motion.
+   - FIXED (heartbeat): the fifth variant was declared in JS but missing from
+       CSS. Added .attention-heartbeat + @keyframes titleHeartbeat (two beats
+       then rest) and included it in the prefers-reduced-motion suppression
+       list so it obeys the OS accessibility preference.
+   - FIXED (shimmer leak): the diagonal light sweep used to bleed over the
+       neighbouring header buttons (settings, prev/next, start/stop) because
+       (a) the title button had no permanent positioning/clipping context and
+       (b) `overflow: hidden` was incorrectly set on the ::after pseudo-element
+       itself, where it does nothing. Now `.header-title-button` is permanently
+       `position: relative; overflow: hidden;`, so the sweep is always confined
+       to the "Eco Cards" button box — even after isStandby flips to false and
+       the `.attention` class is removed.
+   - REMOVED: the "dot badge" attention variant (.title-attention-dot +
+       @keyframes titleDotPulse) has been removed.
+   - NEW (credit modal QR block): styles for .credit-browser-hint,
+       .credit-qr-block, .credit-qr, .credit-text, .credit-email.
+       .credit-browser-hint is explicitly display:block + width:100% +
+       text-align:center so the hint is reliably centered regardless of
+       whatever alignment .settings-content or its ancestors might impose.
+   - TUNED (shimmer): the sweep now fires 25 % more frequently in time.
+       animation-duration shortened from 4.5 s → 3.6 s (−25 % period,
+       +33 % sweeps per second). The sweep window (60 % → 80 % of the
+       cycle) and all visual properties (gradient, 110° angle, easing)
+       are unchanged, so the glide is still brief per the design note.
+   - NEW (rotate): a fifth attention variant — a horizontal 360° rotateY
+       flip across the "Eco Cards" label, then a long rest. 6 s cycle,
+       45 % turn / 55 % rest, ease-in-out so the flip reads as calm.
+       Also included in the prefers-reduced-motion suppression list.
 */
 
 /* ============================================================
@@ -577,7 +614,7 @@ body.light .recognized-chip.recognized-error {
 
 .svg-wrapper {
   flex: 1 1 auto;
-  min-height: 60px;      /* was 40px — FIX C: give text-heavy SVGs real height */
+  min-height: 60px;
   min-width: 0;
   max-height: 100%;
   max-width: 100%;
@@ -596,8 +633,6 @@ body.light .recognized-chip.recognized-error {
   max-width: 100%;
   max-height: 100%;
   display: block;
-  /* object-fit removed — it is a no-op on inline SVG.
-     preserveAspectRatio="xMidYMid meet" is set in JS instead (Fix B). */
 }
 
 .svg-wrapper.svg-bordered {
@@ -1311,6 +1346,13 @@ body.light .stats-bucket-count {
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
   text-align: left;
+
+  /* Permanent positioning + clipping context so the shimmer
+     pseudo-element is always confined to the "Eco Cards"
+     button box — never the neighbouring buttons (settings,
+     prev/next, start/stop). */
+  position: relative;
+  overflow: hidden;
 }
 
 @media (hover: hover) {
@@ -1340,6 +1382,70 @@ body.light .header-title-button {
   padding-bottom: 1.2rem;
 }
 
+/* ---- Credit modal: "Use browser Chrome or Opera" hint ---- */
+/* Explicit display:block + width:100% guarantees the paragraph
+   fills the modal body, so text-align:center actually centers the
+   label. Without width:100% some flex/block contexts shrink-wrap
+   the <p> and the text appears left-aligned. */
+.credit-browser-hint {
+  display: block;
+  width: 100%;
+  margin: 0 0 1rem 0;
+  padding: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffd54f;
+}
+
+body.light .credit-browser-hint {
+  color: #b26500;
+}
+
+/* ---- Credit modal: QR code block ---- */
+.credit-qr-block {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.2rem;
+}
+
+.credit-qr {
+  display: block;
+  width: 180px;
+  height: 180px;
+  border-radius: 8px;
+  background: #ffffff;                 /* QR needs a light background to scan */
+  padding: 8px;                        /* quiet zone around the modules */
+  box-sizing: border-box;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.credit-text {
+  margin: 0;
+  line-height: 1.6;
+  color: #e0e0e0;
+}
+
+.credit-email {
+  color: #4da3ff;
+  text-decoration: none;
+}
+.credit-email:hover {
+  text-decoration: underline;
+}
+
+/* Light theme */
+body.light .credit-qr {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+body.light .credit-text {
+  color: #333;
+}
+body.light .credit-email {
+  color: #0078d4;
+}
+
 /* ============================================================
    FONT COLOR — per-letter spans emitted by <ColoredText>
    ============================================================ */
@@ -1353,3 +1459,228 @@ body.light .fc-green { color: #2e7d32; }
 body.light .fc-blue  { color: #1565c0; }
 body.light .fc-red   { color: #c62828; }
 body.light .fc-brown { color: #5d4037; }
+
+/* ============================================================
+   STAND-BY ATTENTION ANIMATIONS (title button)
+   Five variants, randomly chosen on app load / after each break:
+     .attention-glow       — soft box-shadow halo
+     .attention-breathe    — color oscillation (eco-green)
+     .attention-shimmer    — brief diagonal light sweep (clipped)
+     .attention-heartbeat  — subtle scale + shadow "tap me" pulse
+     .attention-rotate     — horizontal 360° flip, then rest
+   All variants respect prefers-reduced-motion.
+   ============================================================ */
+
+/* shared: give the button a positioning context (belt-and-braces —
+   the base .header-title-button rule already does this) */
+.header-title-button.attention {
+  position: relative;
+}
+
+/* ---- Variant 1: glow ---- */
+.header-title-button.attention-glow {
+  animation: titleStandbyGlow 2.4s ease-in-out infinite;
+}
+@keyframes titleStandbyGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(77, 163, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.35),
+                0 0 12px 2px rgba(77, 163, 255, 0.25);
+  }
+}
+body.light .header-title-button.attention-glow {
+  animation-name: titleStandbyGlowLight;
+}
+@keyframes titleStandbyGlowLight {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 120, 212, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(0, 120, 212, 0.25),
+                0 0 12px 2px rgba(0, 120, 212, 0.18);
+  }
+}
+
+/* ---- Variant 2: breathe (color) ---- */
+.header-title-button.attention-breathe {
+  animation: titleEcoBreathe 3.2s ease-in-out infinite;
+}
+@keyframes titleEcoBreathe {
+  0%, 100% { color: inherit; }
+  50%      { color: #8fdca3; }
+}
+body.light .header-title-button.attention-breathe {
+  animation-name: titleEcoBreatheLight;
+}
+@keyframes titleEcoBreatheLight {
+  0%, 100% { color: #333; }
+  50%      { color: #2e7d32; }
+}
+
+/* ---- Variant 3: shimmer sweep (clipped to the title button) ----
+   DESIGN NOTE: "Fancy but easy to overdo; keep the cycle long
+   (~4–5 s) and the sweep brief."
+
+   TUNED TO FIRE 25 % MORE FREQUENTLY IN TIME:
+     • period shortened from 4.5 s → 3.6 s (exactly −25 % period,
+       i.e. +33 % sweeps per second; the sweep now arrives once
+       every ~3.6 s instead of once every 4.5 s)
+     • sweep window UNCHANGED (60 % → 80 % of the cycle),
+       so the glide itself is still brief (~0.72 s of motion
+       and ~2.88 s of idle). Only the interval between
+       glints got shorter.
+   Result: same brief glint, 25 % more often. */
+.header-title-button.attention-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  animation: titleShimmer 3.6s ease-in-out infinite;
+  pointer-events: none;
+  /* No overflow:hidden here — the PARENT (.header-title-button)
+     already clips the sweep to the button box. Setting it on the
+     pseudo-element itself would be a no-op. */
+}
+@keyframes titleShimmer {
+  0%, 60%  { transform: translateX(-120%); }
+  80%      { transform: translateX(120%);  }
+  100%     { transform: translateX(120%);  }
+}
+body.light .header-title-button.attention-shimmer::after {
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(0, 120, 212, 0.25) 50%,
+    transparent 70%
+  );
+}
+
+/* ---- Variant 4: heartbeat (two beats, then rest) ---- */
+/* Subtle scale + shadow, using the same rhythm as a resting pulse:
+   beat → pause → beat → long rest. transform-origin is centered so
+   the button never appears to shift. */
+.header-title-button.attention-heartbeat {
+  animation: titleHeartbeat 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes titleHeartbeat {
+  /* rest, and the long flat tail after the second beat */
+  0%, 20%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(77, 163, 255, 0);
+  }
+  /* first beat */
+  5% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.35),
+                0 0 10px 2px rgba(77, 163, 255, 0.20);
+  }
+  10% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(77, 163, 255, 0);
+  }
+  /* second beat */
+  25% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.35),
+                0 0 10px 2px rgba(77, 163, 255, 0.20);
+  }
+  30% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(77, 163, 255, 0);
+  }
+}
+
+body.light .header-title-button.attention-heartbeat {
+  animation-name: titleHeartbeatLight;
+}
+@keyframes titleHeartbeatLight {
+  0%, 20%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 120, 212, 0);
+  }
+  5% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.28),
+                0 0 10px 2px rgba(0, 120, 212, 0.15);
+  }
+  10% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 120, 212, 0);
+  }
+  25% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.28),
+                0 0 10px 2px rgba(0, 120, 212, 0.15);
+  }
+  30% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 120, 212, 0);
+  }
+}
+
+/* ---- Variant 5: rotate (horizontal spin, then rest) ----
+   A full 360° rotateY turn that reads as the label "spinning on
+   its vertical axis" — like a coin flipping. Unlike glow/breathe,
+   this motion is unmistakable, so the rhythm is deliberately
+   conservative:
+     • 6 s cycle (long — matches the "~4–5 s or more" ethos)
+     • 45 % of the cycle is the actual turn (~2.7 s)
+     • 55 % of the cycle is motionless (~3.3 s)
+   The turn is smooth (ease-in-out) so it doesn't snap at the
+   start or stop, and the button never leaves its box (rotateY
+   is a visual transform; layout is unaffected). */
+.header-title-button.attention-rotate {
+  animation: titleRotate 6s ease-in-out infinite;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+  backface-visibility: visible;
+}
+
+@keyframes titleRotate {
+  /* rest */
+  0%, 100% { transform: rotateY(0deg); }
+  /* turn runs across the first 45 % of the cycle, then holds */
+  45%      { transform: rotateY(360deg); }
+}
+
+/* No colour-related changes for the rotate variant — the rule
+   below is just a placeholder so future per-theme overrides have
+   an obvious home. */
+body.light .header-title-button.attention-rotate {
+  /* no-op today */
+}
+
+/* ---- Suppress decoration when focused ---- */
+.header-title-button.attention:focus-visible {
+  animation: none;
+}
+.header-title-button.attention:focus-visible::after {
+  animation: none;
+  opacity: 0;
+}
+
+/* ---- Reduced motion: static cue instead ---- */
+@media (prefers-reduced-motion: reduce) {
+  .header-title-button.attention-glow,
+  .header-title-button.attention-breathe,
+  .header-title-button.attention-shimmer::after,
+  .header-title-button.attention-heartbeat,
+  .header-title-button.attention-rotate {
+    animation: none;
+  }
+  .header-title-button.attention {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+}

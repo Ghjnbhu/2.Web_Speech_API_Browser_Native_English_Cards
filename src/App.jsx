@@ -1,21 +1,26 @@
 // App.jsx — Eco Cards (speech app) + per-letter Font Color rendering
 // All prior behavior preserved.
 //
-// SVG FIXES APPLIED (v6 — final):
-//  A. sanitizeSvgString: strip ALL `<?xml …?>` prologs, extract only the
-//     first complete <svg>…</svg> block. Robust parsererror detection.
-//  B. renderSvgToContainer: render temp SVG at 1:1 scale (width=vw,
-//     height=vh, preserveAspectRatio="none"), then use
-//     getBoundingClientRect() to measure actual painted ink. This gives
-//     the true viewBox-unit bounds of every visible element, including
-//     strokes and glyph overhangs/descenders. No letterboxing offset,
-//     no clipped bottoms.
-//  C. sizeOne(): MIN_SVG_H floor raised 40 → 60.
+// STAND-BY ATTENTION ANIMATION:
+//  The header title button gets one of FOUR attention variants
+//  (glow / breathe / shimmer / heartbeat), rolled at random on
+//  load and re-rolled after every study session ("break"). Gated by
+//  `isStandby`.
+//
+// FIX: voice loading no longer leaves `isSpeaking = true` stuck.
+//      `applyDatabasePayload` and `prevRecord` / `nextRecord` reset
+//      `isSpeaking`, `isListeningForRepeat`, `manualPulseCard` so
+//      `isStandby` becomes true after a lesson loads.
+//
+// REMOVED: the "dot badge" attention variant (`.title-attention-dot`)
+//          has been removed from ATTENTION_VARIANTS and the header
+//          title button no longer renders the extra dot <span>.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
 import { recordAttempt, flushAutoBuffer, fetchStats } from './rafStats';
 import './App.css';
+import qrUrl from './assets/qr.svg';
 
 const LESSONS_INDEX_URL = '/lessons/index.json';
 
@@ -43,6 +48,9 @@ const RUSSIAN_LANG_PREFIXES = ['ru-ru'];
 
 const DB_FILENAME_COOKIE = 'ecoCards.dbFileName';
 const DB_FILENAME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+// ▼ Standby attention animation variants for the header title
+const ATTENTION_VARIANTS = ['glow', 'breathe', 'shimmer', 'heartbeat', 'rotate'];
 
 const setCookie = (name, value, maxAgeSeconds) => {
   if (typeof document === 'undefined') return;
@@ -333,9 +341,6 @@ const buildVoicesLoadedMessage = (voices) => {
   return lines.join('\n');
 };
 
-/* ── FONT-COLOR ────────────────────────────────────────────────────────────
-   ColoredText renders a plain string with per-letter colored spans.
-   ─────────────────────────────────────────────────────────────────────── */
 const ColoredText = ({ text, colors }) => {
   if (!text) return null;
   if (!colors || Object.keys(colors).length === 0) return <>{text}</>;
@@ -370,7 +375,6 @@ const ColoredText = ({ text, colors }) => {
   return <>{nodes}</>;
 };
 
-// ── FONT-COLOR ──
 const normalizeFontColors = (card) => {
   if (!card) return { word: {}, transcription: {}, translation: {} };
   const lc = card.letterColors || {};
@@ -424,6 +428,12 @@ const App = () => {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [isCreditOpen, setIsCreditOpen] = useState(false);
+
+  // ── Standby attention animation for the header title ──
+  const [attentionVariant, setAttentionVariant] = useState(
+    () => ATTENTION_VARIANTS[Math.floor(Math.random() * ATTENTION_VARIANTS.length)]
+  );
+  const attentionVariantRef = useRef(attentionVariant);
 
   const displayInfo = useDisplayInfo();
 
@@ -537,6 +547,7 @@ const App = () => {
   useEffect(() => { isStudyingRef.current = isStudying; }, [isStudying]);
   useEffect(() => { timeRemainingRef.current = timeRemaining; }, [timeRemaining]);
   useEffect(() => { availableVoicesRef.current = availableVoices; }, [availableVoices]);
+  useEffect(() => { attentionVariantRef.current = attentionVariant; }, [attentionVariant]);
 
   useEffect(() => {
     document.body.classList.remove('light', 'dark');
@@ -679,6 +690,14 @@ const App = () => {
     alert(message);
   };
 
+  // Roll a new attention variant, avoiding an immediate repeat.
+  const rollAttentionVariant = useCallback(() => {
+    setAttentionVariant((prev) => {
+      const choices = ATTENTION_VARIANTS.filter((v) => v !== prev);
+      return choices[Math.floor(Math.random() * choices.length)];
+    });
+  }, []);
+
   const cancelAllSpeech = () => {
     speechGenerationRef.current++;
     try { synthRef.current?.cancel(); } catch (err) { }
@@ -750,12 +769,15 @@ const App = () => {
   const loadVoices = () => {
     if (!isSpeechSupported()) { setVoiceSupport(false); return; }
     setIsLoadingVoices(true);
+    // ★ Ensure speaking flag is clean (voice-load fires dummy utterances)
+    setIsSpeaking(false);
 
     const loadWebVoices = () => {
       if (!mountedRef.current) return true;
       const voices = synthRef.current ? synthRef.current.getVoices() : [];
       if (voices && voices.length > 0) {
         applyLoadedVoices(voices);
+        setIsSpeaking(false);
         return true;
       }
       return false;
@@ -768,6 +790,7 @@ const App = () => {
       const voices = synthRef.current ? synthRef.current.getVoices() : [];
       if (voices && voices.length > 0) {
         applyLoadedVoices(voices);
+        setIsSpeaking(false);
         if (synthRef.current && synthRef.current.onvoiceschanged) {
           synthRef.current.onvoiceschanged = null;
         }
@@ -780,7 +803,10 @@ const App = () => {
         const dummyUtterance = new SpeechSynthesisUtterance(' ');
         synthRef.current.cancel();
         synthRef.current.speak(dummyUtterance);
-        setTimeout(() => { try { synthRef.current?.cancel(); } catch (err) { } }, 100);
+        setTimeout(() => {
+          try { synthRef.current?.cancel(); } catch (err) { }
+          setIsSpeaking(false);   // ★ clear flag after dummy utterance
+        }, 150);
       } catch (err) { console.warn('Error triggering voice loading:', err); }
     }
 
@@ -796,10 +822,12 @@ const App = () => {
               synthRef.current.onvoiceschanged = null;
             }
             setIsLoadingVoices(false);
+            setIsSpeaking(false);
           } else if (!voicesLoaded && attempts < 10) {
             retryLoad();
           } else if (!voicesLoaded && attempts >= 10) {
             setIsLoadingVoices(false);
+            setIsSpeaking(false);   // ★
             alert('⚠️ Could not load voices. Please tap the "Load Voices" button again.');
           }
         }, 500);
@@ -1265,6 +1293,9 @@ const App = () => {
     setCardPulsing('singular', false);
     setCardPulsing('plural', false);
     clearManualPulse();
+
+    // ★ Re-roll the standby attention animation on every break
+    rollAttentionVariant();
 
     if (showCompletionAlert && !completionAlertShownRef.current) {
       if (settingsRef.current.repeatAfterMe && !navRepeatActiveRef.current) {
@@ -1953,19 +1984,6 @@ const App = () => {
       .map(token => (CLASS_TOKEN_REGEX.test(token) ? `${scopeId}-${token}` : token))
       .join(' ');
 
-  // ── FIX B (v6): 1:1 rendering + getBoundingClientRect ──
-  //
-  // getBBox() returns the font em-box for <text>, not the painted ink
-  // → descenders and overhangs get clipped.
-  //
-  // The previous getBoundingClientRect() attempt letterboxed the temp
-  // SVG (its rendered size didn't match the viewBox aspect ratio), so
-  // screen-pixel offsets were not true viewBox offsets.
-  //
-  // Fix: render temp SVG at EXACTLY its viewBox width/height with
-  // preserveAspectRatio="none". Then (r.left - svgRect.left) is a
-  // direct viewBox-coordinate offset — no scaling, no letterbox. This
-  // measures true painted ink, including strokes and glyph overhangs.
   const renderSvgToContainer = (container, svgCode, uniqueId) => {
     if (!container) return;
     container.replaceChildren();
@@ -1981,9 +1999,6 @@ const App = () => {
       const sanitizedSvg = sanitizeSvgString(svgCode);
       if (!sanitizedSvg) return;
 
-      // Determine the SVG's viewBox. If none is declared, fall back to
-      // width/height attributes, and if those are missing, use a
-      // stable default coordinate frame.
       const vbAttr = sanitizedSvg.getAttribute('viewBox');
       let vb = null;
       if (vbAttr) {
@@ -2009,7 +2024,6 @@ const App = () => {
 
       const [vx, vy, vw, vh] = vb;
 
-      // Render a clone at 1:1 scale (1 viewBox unit = 1 CSS pixel).
       const tempSvg = sanitizedSvg.cloneNode(true);
       tempSvg.setAttribute('width', String(vw));
       tempSvg.setAttribute('height', String(vh));
@@ -2022,7 +2036,6 @@ const App = () => {
       tempSvg.style.overflow = 'visible';
       measure.appendChild(tempSvg);
 
-      // Force layout so getBoundingClientRect works immediately.
       // eslint-disable-next-line no-unused-expressions
       tempSvg.getBoundingClientRect();
 
@@ -2037,7 +2050,6 @@ const App = () => {
         return;
       }
 
-      // With width==vw and height==vh, 1 client px == 1 viewBox unit.
       const pxPerUnitX = svgRect.width / vw;
       const pxPerUnitY = svgRect.height / vh;
 
@@ -2079,7 +2091,6 @@ const App = () => {
       measure.removeChild(tempSvg);
 
       if (found && isFinite(minX) && isFinite(maxX) && maxX > minX && maxY > minY) {
-        // Tiny pad so anti-aliased edges aren't clipped.
         const padX = (maxX - minX) * 0.005;
         const padY = (maxY - minY) * 0.005;
         const newVb =
@@ -2167,6 +2178,10 @@ const App = () => {
     setManualPulseCard(null);
 
     failedCardsRef.current = [];
+
+    // ★ a fresh lesson load always means standby
+    setIsSpeaking(false);
+    setIsListeningForRepeat(false);
   }, []);
 
   const loadDatabaseFromFile = useCallback(async () => {
@@ -2262,6 +2277,9 @@ const App = () => {
       cancelAllSpeech(); clearManualPulse();
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex); setCurrentRecord(allRecords[newIndex]); setActiveCard('singular');
+      // ★ ensure standby flags are clean
+      setIsSpeaking(false);
+      setIsListeningForRepeat(false);
     }
   };
   const prevRecord = () => {
@@ -2270,6 +2288,9 @@ const App = () => {
       cancelAllSpeech(); clearManualPulse();
       const newIndex = currentIndex - 1;
       setCurrentIndex(newIndex); setCurrentRecord(allRecords[newIndex]); setActiveCard('singular');
+      // ★ ensure standby flags are clean
+      setIsSpeaking(false);
+      setIsListeningForRepeat(false);
     }
   };
 
@@ -2600,6 +2621,16 @@ const App = () => {
     !navRepeatActive &&
     !showRepeatChip;
 
+  // Standby = nothing is happening (title should attract attention)
+  const isStandby =
+    dbLoaded &&
+    allRecords.length > 0 &&
+    !isStudying &&
+    !navRepeatActive &&
+    !isSpeaking &&
+    !isListeningForRepeat &&
+    !manualPulseCard;
+
   const singularFontColors = currentRecord?.singular?.fontColors || {};
   const pluralFontColors   = currentRecord?.plural?.fontColors   || {};
 
@@ -2625,7 +2656,12 @@ const App = () => {
 
             <button
               type="button"
-              className="header-title header-title-button"
+              className={
+                'header-title header-title-button' +
+                (isStandby
+                  ? ` attention attention-${attentionVariant}`
+                  : '')
+              }
               onClick={() => setIsCreditOpen(true)}
               aria-label="About Eco Cards"
               title="About Eco Cards"
@@ -3515,56 +3551,67 @@ const App = () => {
         </div>
       )}
 
-      {isCreditOpen && (
-        <div
-          className="settings-overlay"
-          onClick={() => setIsCreditOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="settings-modal credit-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="credit-title"
-          >
-            <div className="settings-header">
-              <h2 id="credit-title">🌱 Eco Cards</h2>
-              <button
-                className="settings-close"
-                onClick={() => setIsCreditOpen(false)}
-                aria-label="Close"
-                title="Close"
+          {isCreditOpen && (
+            <div
+              className="settings-overlay"
+              onClick={() => setIsCreditOpen(false)}
+              role="presentation"
+            >
+              <div
+                className="settings-modal credit-modal"
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="credit-title"
               >
-                <span aria-hidden="true">×</span>
-              </button>
-            </div>
+                <div className="settings-header">
+                  <h2 id="credit-title">🌱 Eco Cards</h2>
+                  <button
+                    className="settings-close"
+                    onClick={() => setIsCreditOpen(false)}
+                    aria-label="Close"
+                    title="Close"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </div>
 
-            <div className="settings-content">
-              <p style={{ margin: 0, lineHeight: 1.6, color: '#e0e0e0' }}>
-                Suggestions for improvement:{' '}
-                <a
-                  href="mailto:bogatyrev.viktor@gmail.com?subject=Eco%20Cards%20suggestion"
-                  style={{ color: '#4da3ff', textDecoration: 'none' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                >
-                  bogatyrev.viktor@gmail.com
-                </a>
-              </p>
-            </div>
+                <div className="settings-content">
+                          <p className="credit-browser-hint">
+                            Use browser Chrome or Opera
+                          </p>
+                  <div className="credit-qr-block">
+                    <img
+                      className="credit-qr"
+                      src={qrUrl}
+                      alt="QR code for Eco Cards"
+                      width={180}
+                      height={180}
+                    />
+                  </div>
 
-            <div className="settings-footer">
-              <button
-                className="settings-ok"
-                onClick={() => setIsCreditOpen(false)}
-              >
-                Ok
-              </button>
+                  <p className="credit-text">
+                    Suggestions for improvement:{' '}
+                    <a
+                      href="mailto:bogatyrev.viktor@gmail.com?subject=Eco%20Cards%20suggestion"
+                      className="credit-email"
+                    >
+                      bogatyrev.viktor@gmail.com
+                    </a>
+                  </p>
+                </div>
+
+                <div className="settings-footer">
+                  <button
+                    className="settings-ok"
+                    onClick={() => setIsCreditOpen(false)}
+                  >
+                    Ok
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
       <input
         type="file"
