@@ -17,15 +17,24 @@
 //          title button no longer renders the extra dot <span>.
 //
 // NEW (credit modal): the credit modal now shows:
-//   • a centered "Click to share Eco Cards link." button (triggers
-//     the Share action: native share on Android, system share panel
-//     on Windows when supported, clipboard fallback otherwise)
+//   • a centered "Click to share Eco Cards link." button
 //   • a centered "Use browser Chrome or Opera." hint
 //   • a clickable QR code image (src/assets/qr.svg) on a white card
 //     that triggers the SAME Share action as the hint above
 //   • a centered "Suggestions for improvement: <email>" line
 // The modal no longer renders a footer / "Ok" button. It is closed
 // by clicking the dark overlay or the × icon in its header.
+//
+// SHARE STRATEGY (shareEcoCards):
+//   • Mobile (Android / iOS): use navigator.share() so the native
+//     app picker appears (WhatsApp, Telegram, Mail, …).
+//   • Desktop (Windows / macOS / Linux): skip navigator.share()
+//     entirely and copy the URL to the clipboard. This sidesteps the
+//     unreliable Windows 10 share sheet, where Teams/Outlook often
+//     received the message body without a usable link.
+//   • Anywhere: if the share path is missing or fails for any reason
+//     other than user cancellation, fall back to clipboard copy with
+//     a confirmation alert.
 //
 // FIX (platform-consistent status pill icon):
 //   On some Android browsers the pill briefly showed 🎤 during a normal
@@ -1675,49 +1684,61 @@ const App = () => {
   const closeStats = () => setIsStatsOpen(false);
 
   // ── Share Eco Cards link ──────────────────────────────────────
-  // Uses the Web Share API where available (Android → native app
-  // picker; Windows Edge/Chrome → system share panel). Falls back
-  // to copying the link to the clipboard when the API is missing,
-  // blocked, or the OS has no share target.
+  // Mobile (Android / iOS): use the Web Share API so the native
+  //   app picker appears (WhatsApp, Telegram, Mail, …).
+  // Desktop (Windows / macOS / Linux): skip navigator.share()
+  //   entirely and copy the URL to the clipboard. This sidesteps
+  //   the unreliable Windows 10 share sheet, where Teams/Outlook
+  //   often receive the message body without a usable link.
   const shareEcoCards = async () => {
-    const shareData = {
-      title: 'Eco Cards',
-      text: 'Check out Eco Cards',
-      url: window.location.href,
-    };
+    const url = window.location.href;
 
-    const copyFallback = async () => {
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+    const copyToClipboard = async () => {
       try {
-        await navigator.clipboard.writeText(shareData.url);
+        await navigator.clipboard.writeText(url);
         alert('Eco Cards link copied to clipboard.');
-      } catch (_) {
-        // Last-ditch fallback: legacy execCommand route
-        const ta = document.createElement('textarea');
-        ta.value = shareData.url;
-        ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try { document.execCommand('copy'); } catch (_) { /* noop */ }
-        document.body.removeChild(ta);
-        alert('Eco Cards link copied to clipboard.');
-      }
+        return;
+      } catch (_) { /* fall through to legacy */ }
+
+      // Legacy fallback for older browsers / non-secure contexts
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) { /* noop */ }
+      document.body.removeChild(ta);
+      alert('Eco Cards link copied to clipboard.');
     };
 
+    // ── Desktop: always clipboard ──
+    if (!isMobile) {
+      await copyToClipboard();
+      return;
+    }
+
+    // ── Mobile: prefer native share, fall back to clipboard ──
     if (navigator.share) {
       try {
-        await navigator.share(shareData);
-        return;                                       // success — nothing more
+        await navigator.share({
+          title: 'Eco Cards',
+          text: 'Check out Eco Cards',
+          url,
+        });
+        return;                                        // success — nothing more
       } catch (err) {
-        if (err && err.name === 'AbortError') return; // user cancelled
-        // NotAllowedError, DataError, etc. → fall through to clipboard
-        await copyFallback();
+        if (err && err.name === 'AbortError') return;  // user cancelled
+        // NotAllowedError, DataError, etc. → clipboard fallback
+        await copyToClipboard();
         return;
       }
     }
 
-    await copyFallback();
+    await copyToClipboard();
   };
 
   const SETTINGS_SCHEMA = {
