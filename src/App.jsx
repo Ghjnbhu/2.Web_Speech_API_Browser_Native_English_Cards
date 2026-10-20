@@ -2777,7 +2777,7 @@ const App = () => {
                   aria-label="Currently speaking"
                   title="Speaking"
                 >
-                  <span aria-hidden="true">🎧</span>
+                  <span aria-hidden="true">MIC</span>
                 </span>
               ) : dbLoaded && currentRecord && !repeatSessionActive ? (
                 <>
