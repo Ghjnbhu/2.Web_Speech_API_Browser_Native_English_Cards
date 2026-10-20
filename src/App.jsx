@@ -2812,7 +2812,7 @@ const App = () => {
                     <>
                       <span className="db-info-separator" aria-hidden="true">|</span>
                       <span className="db-info-repeat" aria-live="polite">
-                        {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
+                        {repeatStatus === 'listening' && (<><span aria-hidden="true">🎤🎤</span><span>Listening ({repeatProgress.current}/{repeatProgress.total})…</span></>)}
                         {repeatStatus === 'matched' && (<><span aria-hidden="true">✅</span><span>Matched ({repeatProgress.current}/{repeatProgress.total})</span></>)}
                         {repeatStatus === 'retry' && (<><span aria-hidden="true">🔁</span><span>Retry ({repeatProgress.current}/{repeatProgress.total})</span></>)}
                         {repeatStatus === 'error' && (<><span aria-hidden="true">⚠️</span><span>Speech error</span></>)}
