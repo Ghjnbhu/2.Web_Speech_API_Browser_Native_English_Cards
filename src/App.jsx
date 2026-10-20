@@ -2,8 +2,8 @@
 // All prior behavior preserved.
 //
 // STAND-BY ATTENTION ANIMATION:
-//  The header title button gets one of FOUR attention variants
-//  (glow / breathe / shimmer / heartbeat), rolled at random on
+//  The header title button gets one of FIVE attention variants
+//  (glow / breathe / shimmer / heartbeat / rotate), rolled at random on
 //  load and re-rolled after every study session ("break"). Gated by
 //  `isStandby`.
 //
@@ -15,6 +15,13 @@
 // REMOVED: the "dot badge" attention variant (`.title-attention-dot`)
 //          has been removed from ATTENTION_VARIANTS and the header
 //          title button no longer renders the extra dot <span>.
+//
+// NEW (credit modal): the credit modal now shows:
+//   • a centered "Use browser Chrome or Opera" hint
+//   • a QR code image (src/assets/qr.svg) on a white card
+//   • a centered "Suggestions for improvement: <email>" line
+// The modal no longer renders a footer / "Ok" button. It is closed
+// by clicking the dark overlay or the × icon in its header.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -3551,67 +3558,59 @@ const App = () => {
         </div>
       )}
 
-          {isCreditOpen && (
-            <div
-              className="settings-overlay"
-              onClick={() => setIsCreditOpen(false)}
-              role="presentation"
-            >
-              <div
-                className="settings-modal credit-modal"
-                onClick={(e) => e.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="credit-title"
+      {isCreditOpen && (
+        <div
+          className="settings-overlay"
+          onClick={() => setIsCreditOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="settings-modal credit-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="credit-title"
+          >
+            <div className="settings-header">
+              <h2 id="credit-title">🌱 Eco Cards</h2>
+              <button
+                className="settings-close"
+                onClick={() => setIsCreditOpen(false)}
+                aria-label="Close"
+                title="Close"
               >
-                <div className="settings-header">
-                  <h2 id="credit-title">🌱 Eco Cards</h2>
-                  <button
-                    className="settings-close"
-                    onClick={() => setIsCreditOpen(false)}
-                    aria-label="Close"
-                    title="Close"
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                </div>
-
-                <div className="settings-content">
-                          <p className="credit-browser-hint">
-                            Use browser Chrome or Opera
-                          </p>
-                  <div className="credit-qr-block">
-                    <img
-                      className="credit-qr"
-                      src={qrUrl}
-                      alt="QR code for Eco Cards"
-                      width={180}
-                      height={180}
-                    />
-                  </div>
-
-                  <p className="credit-text">
-                    Suggestions for improvement:{' '}
-                    <a
-                      href="mailto:bogatyrev.viktor@gmail.com?subject=Eco%20Cards%20suggestion"
-                      className="credit-email"
-                    >
-                      bogatyrev.viktor@gmail.com
-                    </a>
-                  </p>
-                </div>
-
-                <div className="settings-footer">
-                  <button
-                    className="settings-ok"
-                    onClick={() => setIsCreditOpen(false)}
-                  >
-                    Ok
-                  </button>
-                </div>
-              </div>
+                <span aria-hidden="true">×</span>
+              </button>
             </div>
-          )}
+
+            <div className="settings-content">
+              <p className="credit-browser-hint">
+                Use browser Chrome or Opera
+              </p>
+
+              <div className="credit-qr-block">
+                <img
+                  className="credit-qr"
+                  src={qrUrl}
+                  alt="QR code for Eco Cards"
+                  width={180}
+                  height={180}
+                />
+              </div>
+
+              <p className="credit-text">
+                Suggestions for improvement:{' '}
+                <a
+                  href="mailto:bogatyrev.viktor@gmail.com?subject=Eco%20Cards%20suggestion"
+                  className="credit-email"
+                >
+                  bogatyrev.viktor@gmail.com
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <input
         type="file"
