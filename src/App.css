@@ -1422,7 +1422,11 @@ body.light .credit-browser-hint {
 }
 
 .credit-text {
+  display: block;
+  width: 100%;
   margin: 0;
+  padding: 0;
+  text-align: center;
   line-height: 1.6;
   color: #e0e0e0;
 }
