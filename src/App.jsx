@@ -25,16 +25,22 @@
 //
 // FIX (platform-consistent status pill icon):
 //   On some Android browsers the pill briefly showed 🎤 during a normal
-//   auto-pronounce study (repeat-after-me OFF) because a stale
-//   `isListeningForRepeat = true` survived from a previous repeat
-//   session. Three guards make the pill icon strictly correct:
-//     1. the 🎤 render is wrapped in `settings.repeatAfterMe && …`
+//   auto-pronounce study (repeat-after-me OFF). Three defenses:
+//     1. The 🎤 render is gated by `settings.repeatAfterMe && isStudying
+//        && isListeningForRepeat && !showRepeatChip` — the mic can only
+//        appear during a real listening cycle of a real study session.
 //     2. `startStudyTimer` force-clears `isListeningForRepeat` and
-//        `isSpeaking` at the top
+//        `isSpeaking` at the top, so a stale `true` cannot survive from
+//        a previous session.
 //     3. `speakOneAndListen` bails out if `settings.repeatAfterMe` is
-//        false, even when a stale ref says otherwise
-//   After these guards the pill shows 🔊 on both Windows and Android
-//   during auto-pronounce study, and 🎤 only when repeat mode is on.
+//        false, so the mic cannot physically start when repeat mode is
+//        off, even if a stale ref says otherwise.
+//     4. `loadSettingsFromFile` ignores `repeatAfterMe` and
+//        `repeatOnWordsNotEqual` so an old `.settings` file cannot
+//        silently re-enable repeat mode on the device.
+//   After these defenses the pill shows 🔊 on both Windows and Android
+//   during auto-pronounce study, and 🎤 only when repeat-after-me is
+//   genuinely running a listening cycle.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -71,6 +77,12 @@ const DB_FILENAME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 // ▼ Standby attention animation variants for the header title
 const ATTENTION_VARIANTS = ['glow', 'breathe', 'shimmer', 'heartbeat', 'rotate'];
+
+// ▼ Keys that must never be restored from a saved .settings file.
+//   They are session-critical flags whose "on" state changes which
+//   icon the status pill shows. Restoring them silently could leave
+//   the app in repeat mode against the user's current intent.
+const SESSION_ONLY_KEYS = ['repeatAfterMe', 'repeatOnWordsNotEqual'];
 
 const setCookie = (name, value, maxAgeSeconds) => {
   if (typeof document === 'undefined') return;
@@ -1732,6 +1744,14 @@ const App = () => {
       try {
         const parsed = JSON.parse(e.target.result);
         const { valid, rejected } = validateSettings(parsed);
+
+        // ★ Never restore session-critical flags from a settings file:
+        //   the user must always toggle "Repeat after me" manually in
+        //   the current session. Otherwise a stale saved .settings file
+        //   can silently re-enable repeat mode and the pill will show 🎤
+        //   during a normal auto-pronounce study (observed on Android).
+        SESSION_ONLY_KEYS.forEach((k) => { delete valid[k]; });
+
         const newSettings = { ...settings, ...valid };
         if (rejected.length > 0) console.warn('[Settings] Rejected invalid fields:', rejected);
         setSettings(newSettings);
@@ -2769,7 +2789,10 @@ const App = () => {
                     </>
                   )}
 
-                  {settings.repeatAfterMe && isListeningForRepeat && !showRepeatChip && (
+                  {settings.repeatAfterMe &&
+                    isStudying &&
+                    isListeningForRepeat &&
+                    !showRepeatChip && (
                     <>
                       <span className="db-info-separator" aria-hidden="true">|</span>
                       <span className="db-info-timer" role="status" aria-live="polite"

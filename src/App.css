@@ -25,13 +25,14 @@
    - NEW (Clickable header title + credit modal):
        The "Eco Cards" title is now a <button> that opens a small modal
        containing:
-         • a "Use browser Chrome or Opera" hint (centered)
-         • a QR code image (src/assets/qr.svg)
+         • a centered "Use browser Chrome or Opera" hint
+         • a QR code image (src/assets/qr.svg) on a white card
          • the credit line "Suggestions for improvement:
-           bogatyrev.viktor@gmail.com"
+           bogatyrev.viktor@gmail.com", centered
+       The modal has NO footer and NO "Ok" button. It is closed by
+       clicking the dark overlay or the × icon in its header.
        The email link uses text-decoration:none so the browser's anchor
        underline does not read as an underscore.
-       The modal's footer button is labelled "Ok" (Windows convention).
    - NEW (Standby attention animation on the header title):
        FIVE variants (glow / breathe / shimmer / heartbeat / rotate)
        chosen at random on load and re-rolled after every study session
@@ -47,15 +48,9 @@
        (b) `overflow: hidden` was incorrectly set on the ::after pseudo-element
        itself, where it does nothing. Now `.header-title-button` is permanently
        `position: relative; overflow: hidden;`, so the sweep is always confined
-       to the "Eco Cards" button box — even after isStandby flips to false and
-       the `.attention` class is removed.
+       to the "Eco Cards" button box.
    - REMOVED: the "dot badge" attention variant (.title-attention-dot +
        @keyframes titleDotPulse) has been removed.
-   - NEW (credit modal QR block): styles for .credit-browser-hint,
-       .credit-qr-block, .credit-qr, .credit-text, .credit-email.
-       .credit-browser-hint is explicitly display:block + width:100% +
-       text-align:center so the hint is reliably centered regardless of
-       whatever alignment .settings-content or its ancestors might impose.
    - TUNED (shimmer): the sweep now fires 25 % more frequently in time.
        animation-duration shortened from 4.5 s → 3.6 s (−25 % period,
        +33 % sweeps per second). The sweep window (60 % → 80 % of the
@@ -1421,6 +1416,9 @@ body.light .credit-browser-hint {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
+/* ---- Credit modal: "Suggestions for improvement" line ----
+   display:block + width:100% forces the <p> to fill the modal
+   body so text-align:center visibly centers the text + link. */
 .credit-text {
   display: block;
   width: 100%;
