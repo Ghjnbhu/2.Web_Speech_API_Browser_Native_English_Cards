@@ -25,7 +25,8 @@
    - NEW (Clickable header title + credit modal):
        The "Eco Cards" title is now a <button> that opens a small modal
        containing:
-         • a centered "Use browser Chrome or Opera" hint
+         • a centered "Click to share Eco Cards link." line
+         • a centered "Use browser Chrome or Opera." hint
          • a QR code image (src/assets/qr.svg) on a white card
          • the credit line "Suggestions for improvement:
            bogatyrev.viktor@gmail.com", centered
@@ -1377,7 +1378,23 @@ body.light .header-title-button {
   padding-bottom: 1.2rem;
 }
 
-/* ---- Credit modal: "Use browser Chrome or Opera" hint ---- */
+/* ---- Credit modal: "Click to share Eco Cards link." ---- */
+.credit-share-hint {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.5rem 0;
+  padding: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffd54f;
+}
+
+body.light .credit-share-hint {
+  color: #b26500;
+}
+
+/* ---- Credit modal: "Use browser Chrome or Opera." hint ---- */
 /* Explicit display:block + width:100% guarantees the paragraph
    fills the modal body, so text-align:center actually centers the
    label. Without width:100% some flex/block contexts shrink-wrap

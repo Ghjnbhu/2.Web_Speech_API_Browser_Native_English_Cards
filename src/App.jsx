@@ -3626,9 +3626,13 @@ const App = () => {
               </button>
             </div>
 
-            <div className="settings-content">
+                        <div className="settings-content">
+              <p className="credit-share-hint">
+                Click to share Eco Cards link.
+              </p>
+
               <p className="credit-browser-hint">
-                Use browser Chrome or Opera
+                Use browser Chrome or Opera to open.
               </p>
 
               <div className="credit-qr-block">
