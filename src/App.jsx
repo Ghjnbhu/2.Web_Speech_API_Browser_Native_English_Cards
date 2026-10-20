@@ -2777,7 +2777,7 @@ const App = () => {
                   aria-label="Currently speaking"
                   title="Speaking"
                 >
-                  <span aria-hidden="true">🔊</span>
+                  <span aria-hidden="true">🎧</span>
                 </span>
               ) : dbLoaded && currentRecord && !repeatSessionActive ? (
                 <>
@@ -2790,7 +2790,7 @@ const App = () => {
                       <span className="db-info-separator" aria-hidden="true">|</span>
                       <span className="db-info-timer" role="status" aria-live="polite"
                         aria-label="Currently speaking" title="Speaking">
-                        <span aria-hidden="true">found</span>
+                        <span aria-hidden="true">🔊</span>
                       </span>
                     </>
                   )}
