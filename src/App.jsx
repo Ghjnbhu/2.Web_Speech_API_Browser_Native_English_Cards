@@ -3708,7 +3708,7 @@ const App = () => {
               </button>
 
               <p className="credit-browser-hint">
-                Use browser Chrome or Opera.
+                Use browser Chrome or Opera to open.
               </p>
 
               <div className="credit-qr-block">
