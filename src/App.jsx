@@ -1726,7 +1726,6 @@ const App = () => {
       try {
         await navigator.share({
           title: 'Eco Cards',
-          text: 'Check out Eco Cards',
           url,
         });
         return;                                        // success — nothing more
