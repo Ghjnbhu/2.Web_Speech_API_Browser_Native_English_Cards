@@ -22,6 +22,19 @@
 //   • a centered "Suggestions for improvement: <email>" line
 // The modal no longer renders a footer / "Ok" button. It is closed
 // by clicking the dark overlay or the × icon in its header.
+//
+// FIX (platform-consistent status pill icon):
+//   On some Android browsers the pill briefly showed 🎤 during a normal
+//   auto-pronounce study (repeat-after-me OFF) because a stale
+//   `isListeningForRepeat = true` survived from a previous repeat
+//   session. Three guards make the pill icon strictly correct:
+//     1. the 🎤 render is wrapped in `settings.repeatAfterMe && …`
+//     2. `startStudyTimer` force-clears `isListeningForRepeat` and
+//        `isSpeaking` at the top
+//     3. `speakOneAndListen` bails out if `settings.repeatAfterMe` is
+//        false, even when a stale ref says otherwise
+//   After these guards the pill shows 🔊 on both Windows and Android
+//   during auto-pronounce study, and 🎤 only when repeat mode is on.
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import SpeechRecognitionLib, { useSpeechRecognition } from 'react-speech-recognition';
@@ -1039,6 +1052,8 @@ const App = () => {
 
   const speakOneAndListen = useCallback((word, attemptIndex, totalAttempts) => {
     if (!isRepeatCycleActive()) return;
+    // ★ Never listen if repeat mode is off — even if a stale ref says otherwise.
+    if (!settingsRef.current.repeatAfterMe) return;
     currentRepeatIndexRef.current = attemptIndex;
     totalRepeatsRef.current = totalAttempts;
     speakTextRef.current(word, null, null, 1, () => {
@@ -1353,6 +1368,11 @@ const App = () => {
 
   const startStudyTimer = () => {
     if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
+
+    // ★ Force-clear any lingering repeat state so the pill can't show 🎤
+    //   during a non-repeat session on slow engines (Android).
+    setIsListeningForRepeat(false);
+    setIsSpeaking(false);
 
     studyStartIndexRef.current = currentIndex;
     studyStartRecordRef.current = currentRecord;
@@ -2749,7 +2769,7 @@ const App = () => {
                     </>
                   )}
 
-                  {isListeningForRepeat && !showRepeatChip && (
+                  {settings.repeatAfterMe && isListeningForRepeat && !showRepeatChip && (
                     <>
                       <span className="db-info-separator" aria-hidden="true">|</span>
                       <span className="db-info-timer" role="status" aria-live="polite"
