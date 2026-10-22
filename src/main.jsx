@@ -1,3 +1,4 @@
+// src/main.jsx
 import 'regenerator-runtime/runtime'; // This MUST be the first import
 
 import { StrictMode } from 'react'

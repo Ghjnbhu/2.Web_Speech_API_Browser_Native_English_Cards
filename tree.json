@@ -1,0 +1,268 @@
+{
+  "type": "directory",
+  "name": "2.Web_Speech_API_Browser_Native_English_Cards",
+  "path": ".",
+  "contents": [
+    {
+      "type": "directory",
+      "name": "api",
+      "path": "api",
+      "contents": [
+        {
+          "type": "file",
+          "name": "raf-stats.js",
+          "path": "api/raf-stats.js"
+        }
+      ]
+    },
+    {
+      "type": "directory",
+      "name": "public",
+      "path": "public",
+      "contents": [
+        {
+          "type": "directory",
+          "name": "lessons",
+          "path": "public/lessons",
+          "contents": [
+            {
+              "type": "file",
+              "name": "Alphabet.json",
+              "path": "public/lessons/Alphabet.json"
+            },
+            {
+              "type": "file",
+              "name": "Alphabet_Vowels.json",
+              "path": "public/lessons/Alphabet_Vowels.json"
+            },
+            {
+              "type": "file",
+              "name": "index.json",
+              "path": "public/lessons/index.json"
+            },
+            {
+              "type": "file",
+              "name": "KitchenCards_20.json",
+              "path": "public/lessons/KitchenCards_20.json"
+            },
+            {
+              "type": "file",
+              "name": "MyEnglishFlashcards.json",
+              "path": "public/lessons/MyEnglishFlashcards.json"
+            },
+            {
+              "type": "file",
+              "name": "MyEnglishLessons.json",
+              "path": "public/lessons/MyEnglishLessons.json"
+            },
+            {
+              "type": "file",
+              "name": "raf-stats.json",
+              "path": "public/lessons/raf-stats.json"
+            },
+            {
+              "type": "file",
+              "name": "Table_ei.json",
+              "path": "public/lessons/Table_ei.json"
+            },
+            {
+              "type": "file",
+              "name": "Table_æ.json",
+              "path": "public/lessons/Table_æ.json"
+            }
+          ]
+        },
+        {
+          "type": "directory",
+          "name": "temp",
+          "path": "public/temp",
+          "contents": [
+            {
+              "type": "file",
+              "name": "favicon.svg",
+              "path": "public/temp/favicon.svg"
+            },
+            {
+              "type": "file",
+              "name": "icons.svg",
+              "path": "public/temp/icons.svg"
+            }
+          ]
+        },
+        {
+          "type": "file",
+          "name": "favicon.svg",
+          "path": "public/favicon.svg"
+        },
+        {
+          "type": "file",
+          "name": "icon.svg",
+          "path": "public/icon.svg"
+        },
+        {
+          "type": "file",
+          "name": "index.html",
+          "path": "public/index.html"
+        },
+        {
+          "type": "file",
+          "name": "robots.txt",
+          "path": "public/robots.txt"
+        }
+      ]
+    },
+    {
+      "type": "directory",
+      "name": "scripts",
+      "path": "scripts",
+      "contents": [
+        {
+          "type": "file",
+          "name": "generate-sitemap.mjs",
+          "path": "scripts/generate-sitemap.mjs"
+        }
+      ]
+    },
+    {
+      "type": "directory",
+      "name": "server",
+      "path": "server",
+      "contents": [
+        {
+          "type": "file",
+          "name": "index.js",
+          "path": "server/index.js"
+        },
+        {
+          "type": "file",
+          "name": "rafStats.js",
+          "path": "server/rafStats.js"
+        }
+      ]
+    },
+    {
+      "type": "directory",
+      "name": "src",
+      "path": "src",
+      "contents": [
+        {
+          "type": "directory",
+          "name": "assets",
+          "path": "src/assets",
+          "contents": [
+            {
+              "type": "file",
+              "name": "hero.png",
+              "path": "src/assets/hero.png"
+            },
+            {
+              "type": "file",
+              "name": "qr.png",
+              "path": "src/assets/qr.png"
+            },
+            {
+              "type": "file",
+              "name": "qr.svg",
+              "path": "src/assets/qr.svg"
+            },
+            {
+              "type": "file",
+              "name": "react.svg",
+              "path": "src/assets/react.svg"
+            },
+            {
+              "type": "file",
+              "name": "vite.svg",
+              "path": "src/assets/vite.svg"
+            }
+          ]
+        },
+        {
+          "type": "file",
+          "name": "App.css",
+          "path": "src/App.css"
+        },
+        {
+          "type": "file",
+          "name": "App.jsx",
+          "path": "src/App.jsx"
+        },
+        {
+          "type": "file",
+          "name": "index.css",
+          "path": "src/index.css"
+        },
+        {
+          "type": "file",
+          "name": "main.jsx",
+          "path": "src/main.jsx"
+        },
+        {
+          "type": "file",
+          "name": "rafStats.js",
+          "path": "src/rafStats.js"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "eslint.config.js",
+      "path": "eslint.config.js"
+    },
+    {
+      "type": "file",
+      "name": "google6c68486600bc7f04.html",
+      "path": "google6c68486600bc7f04.html"
+    },
+    {
+      "type": "file",
+      "name": "index.html",
+      "path": "index.html"
+    },
+    {
+      "type": "file",
+      "name": "package-lock.json",
+      "path": "package-lock.json"
+    },
+    {
+      "type": "file",
+      "name": "package.json",
+      "path": "package.json"
+    },
+    {
+      "type": "file",
+      "name": "postcss.config.js",
+      "path": "postcss.config.js"
+    },
+    {
+      "type": "file",
+      "name": "README.md",
+      "path": "README.md"
+    },
+    {
+      "type": "file",
+      "name": "sitemap.xml",
+      "path": "sitemap.xml"
+    },
+    {
+      "type": "file",
+      "name": "tailwind.config.js",
+      "path": "tailwind.config.js"
+    },
+    {
+      "type": "file",
+      "name": "tree.json",
+      "path": "tree.json"
+    },
+    {
+      "type": "file",
+      "name": "vercel.json",
+      "path": "vercel.json"
+    },
+    {
+      "type": "file",
+      "name": "vite.config.js",
+      "path": "vite.config.js"
+    }
+  ]
+}

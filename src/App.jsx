@@ -1,3 +1,4 @@
+// src/App.jsx
 // App.jsx — Eco Cards (speech app) + per-letter Font Color rendering
 // All prior behavior preserved.
 //
