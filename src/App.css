@@ -594,9 +594,13 @@ body.light .recognized-chip.recognized-error {
   text-align: center;
   width: 100%;
   line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+
+  /* was: overflow: hidden; text-overflow: ellipsis; white-space: nowrap; */
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;   /* break very long tokens if needed */
+  word-break: break-word;
 }
 
 .transcription {
