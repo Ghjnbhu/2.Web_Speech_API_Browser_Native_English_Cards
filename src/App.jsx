@@ -2343,7 +2343,7 @@ const App = () => {
     }
 
     const baseDir = indexUrl.replace(/[^/]*$/, '');
-    const lessonUrl = baseDir + file;
+    const lessonUrl = baseDir + encodeURIComponent(file);
 
     if (isStudying) stopStudyTimer();
     if (navRepeatActiveRef.current) cancelRepeatCycle();
