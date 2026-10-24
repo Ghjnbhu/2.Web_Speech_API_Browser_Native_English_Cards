@@ -1,6 +1,6 @@
 {
   "lessons": [
-    { "file": "Digits 0-10 + - =.json",     "title": "Digits 0-10 + - = (11)" },
+    { "file": "Digits 0-10.json",     "title": "Digits 0-10 + - = (11)" },
     { "file": "Table_ei.json",     "title": "Table_ei (5)" },
     { "file": "Table_æ.json",     "title": "Table_æ (9)" },
     { "file": "Alphabet_Vowels.json",     "title": "Alphabet Vowels" },
